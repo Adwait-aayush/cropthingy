@@ -5,12 +5,20 @@ import boto3
 import numpy as np
 import redis
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = FastAPI(title="Inference Service")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 MODEL_BUCKET = os.getenv("S3_MODEL_BUCKET", "crop-analyzer-models")
 MODEL_KEY = os.getenv("MODEL_KEY", "latest/crop_model.json")
@@ -148,3 +156,11 @@ def health():
 def reload_model():
     load_model()
     return {"status": "reloaded", "model_loaded": model is not None}
+
+
+@app.get("/history")
+def history(limit: int = 200):
+    safe_limit = max(1, min(limit, 500))
+    items = rdb.lrange("dashboard_feed", 0, safe_limit - 1)
+    parsed = [json.loads(i.decode("utf-8")) for i in items]
+    return {"count": len(parsed), "items": list(reversed(parsed))}

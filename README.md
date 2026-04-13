@@ -97,6 +97,7 @@ Files:
 
 What it does:
 - exposes a FastAPI endpoint at `/predict`,
+- exposes a FastAPI endpoint at `/history` for dashboard chart data,
 - returns a health score and advice,
 - uses the saved model if available,
 - falls back to a heuristic score if no model is loaded.
@@ -105,12 +106,15 @@ What it does:
 Folder: [services/dashboard](services/dashboard)
 
 Files:
-- [services/dashboard/app.py](services/dashboard/app.py)
-- [services/dashboard/requirements.txt](services/dashboard/requirements.txt)
+- [services/dashboard/package.json](services/dashboard/package.json)
+- [services/dashboard/index.html](services/dashboard/index.html)
+- [services/dashboard/src/App.jsx](services/dashboard/src/App.jsx)
+- [services/dashboard/src/styles.css](services/dashboard/src/styles.css)
 - [services/dashboard/Dockerfile](services/dashboard/Dockerfile)
 
 What it does:
-- reads live data from Redis list `dashboard_feed`,
+- runs a React dashboard (Vite),
+- fetches live data from inference `/history`,
 - shows graphs for temperature, humidity, soil moisture, and health score,
 - calls the inference API when you request a prediction.
 
