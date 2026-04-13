@@ -1,0 +1,70 @@
+version: "3.9"
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  ingestion:
+    build: ./services/ingestion
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mosquitto
+      - redis
+    restart: unless-stopped
+
+  preprocessing:
+    build: ./services/preprocessing
+    env_file: .env
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  training:
+    build: ./services/training
+    env_file: .env
+    profiles:
+      - manual
+    restart: "no"
+
+  inference:
+    build: ./services/inference
+    env_file: .env
+    ports:
+      - "8001:8001"
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  dashboard:
+    build: ./services/dashboard
+    env_file: .env
+    ports:
+      - "8050:8050"
+    depends_on:
+      - inference
+      - redis
+    restart: unless-stopped
+
+  fake-sensor:
+    build: ./services/fake_sensor
+    env_file: .env
+    depends_on:
+      - mosquitto
+    restart: unless-stopped
+
+volumes:
+  mosquitto_data:
