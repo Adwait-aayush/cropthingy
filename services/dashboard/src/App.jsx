@@ -20,6 +20,14 @@ async function fetchHistory(limit = 200) {
   return res.json();
 }
 
+async function fetchDevices() {
+  const res = await fetch(`${API_BASE}/devices`);
+  if (!res.ok) {
+    throw new Error(`Devices request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 async function requestPrediction(payload) {
   const res = await fetch(`${API_BASE}/predict`, {
     method: "POST",
@@ -38,6 +46,53 @@ function Card({ title, children }) {
       <h3>{title}</h3>
       {children}
     </section>
+  );
+}
+
+function AlertBadge({ label, active }) {
+  return (
+    <span className={`alertBadge ${active ? "alertBadge--on" : "alertBadge--off"}`}>
+      {label}
+    </span>
+  );
+}
+
+function DeviceCard({ device }) {
+  const lastSeen = device.server_ts
+    ? new Date(device.server_ts).toLocaleString()
+    : "—";
+
+  return (
+    <div className="deviceCard">
+      <div className="deviceCard__header">
+        <span className="deviceCard__id">{device.device_id ?? "unknown"}</span>
+        <span className="deviceCard__crop">{device.crop_type ?? "—"}</span>
+      </div>
+      <div className="deviceCard__metrics">
+        <div className="deviceCard__metric">
+          <span className="deviceCard__metricLabel">Temp</span>
+          <span className="deviceCard__metricValue">{device.temperature ?? "—"} °C</span>
+        </div>
+        <div className="deviceCard__metric">
+          <span className="deviceCard__metricLabel">Humidity</span>
+          <span className="deviceCard__metricValue">{device.humidity ?? "—"} %</span>
+        </div>
+        <div className="deviceCard__metric">
+          <span className="deviceCard__metricLabel">Soil</span>
+          <span className="deviceCard__metricValue">{device.soil_moisture ?? "—"} %</span>
+        </div>
+        <div className="deviceCard__metric">
+          <span className="deviceCard__metricLabel">Health</span>
+          <span className="deviceCard__metricValue">{device.health_score ?? "—"}</span>
+        </div>
+      </div>
+      <div className="deviceCard__alerts">
+        <AlertBadge label="Temp ⚠" active={device.alert_temp} />
+        <AlertBadge label="Humidity ⚠" active={device.alert_humidity} />
+        <AlertBadge label="Soil ⚠" active={device.alert_soil} />
+      </div>
+      <div className="deviceCard__lastSeen">Last seen: {lastSeen}</div>
+    </div>
   );
 }
 
@@ -95,6 +150,7 @@ class ChartErrorBoundary extends Component {
 export default function App() {
   const [crop, setCrop] = useState("wheat");
   const [rows, setRows] = useState([]);
+  const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [prediction, setPrediction] = useState(null);
@@ -118,13 +174,17 @@ export default function App() {
     const load = async () => {
       try {
         setError("");
-        const data = await fetchHistory(200);
+        const [histData, devData] = await Promise.all([
+          fetchHistory(200),
+          fetchDevices(),
+        ]);
         if (active) {
-          setRows(Array.isArray(data.items) ? data.items : []);
+          setRows(Array.isArray(histData.items) ? histData.items : []);
+          setDevices(Array.isArray(devData.devices) ? devData.devices : []);
         }
       } catch (e) {
         if (active) {
-          setError(e.message || "Failed to fetch history");
+          setError(e.message || "Failed to fetch data");
         }
       }
     };
@@ -190,6 +250,20 @@ export default function App() {
       )}
 
       {error && <section className="error">{error}</section>}
+
+      {devices.length > 0 && (
+        <section className="hardwareSection">
+          <h2 className="hardwareSection__title">
+            Hardware &amp; Sensor Status
+            <span className="hardwareSection__count">{devices.length} device{devices.length !== 1 ? "s" : ""}</span>
+          </h2>
+          <div className="deviceGrid">
+            {devices.map((d, i) => (
+              <DeviceCard key={d.device_id ?? i} device={d} />
+            ))}
+          </div>
+        </section>
+      )}
 
       <ChartErrorBoundary>
         <section className="grid">

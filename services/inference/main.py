@@ -164,3 +164,16 @@ def history(limit: int = 200):
     items = rdb.lrange("dashboard_feed", 0, safe_limit - 1)
     parsed = [json.loads(i.decode("utf-8")) for i in items]
     return {"count": len(parsed), "items": list(reversed(parsed))}
+
+
+@app.get("/devices")
+def devices():
+    """Return the latest reading for each unique device from the dashboard feed."""
+    items = rdb.lrange("dashboard_feed", 0, 499)
+    seen: dict = {}
+    for raw in items:
+        record = json.loads(raw.decode("utf-8"))
+        device_id = record.get("device_id", "unknown")
+        if device_id not in seen:
+            seen[device_id] = record
+    return {"count": len(seen), "devices": list(seen.values())}
