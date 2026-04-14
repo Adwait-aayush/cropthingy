@@ -1,0 +1,10 @@
+Flask==3.0.3
+pymongo==4.8.0
+python-dotenv==1.0.1
+PyJWT==2.9.0
+Werkzeug==3.0.3
+boto3==1.35.34
+pandas==2.2.3
+numpy==2.1.2
+scikit-learn==1.5.2
+joblib==1.4.2

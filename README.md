@@ -1,23 +1,26 @@
 # Crop Analyzer
 
-A beginner-friendly IoT + ML project that collects crop sensor readings, moves them through MQTT and Redis, then shows them on a live dashboard and exposes a prediction API.
+A beginner-friendly crop monitoring project that reads soil moisture, humidity, and temperature from a basic Arduino over USB serial, sends the data through a Python bridge, stores it in MongoDB, and exposes a crop health API.
 
-This repo currently runs in **demo mode** with a fake sensor publisher so you can test the full pipeline without hardware. Later, you can replace the fake sensor with a real ESP32 and real sensors.
+This repository has two parts:
+
+1. The backend Flask app in [backend/](backend) that receives sensor readings and computes health scores.
+2. The Arduino setup in [aurdino-setup/](aurdino-setup) that prints sensor values over serial, then a Python bridge posts them to the backend.
 
 ## What This Project Does
 
 The system is a simple data pipeline:
 
-1. A sensor sends readings like temperature, humidity, and soil moisture.
-2. MQTT carries those readings to the backend.
-3. The ingestion service receives the message and pushes it into Redis.
-4. The preprocessing service reads from Redis and creates useful features.
-5. The inference service returns a crop health score and advice.
-6. The dashboard shows the live data in charts.
+1. Arduino reads temperature, humidity, and soil moisture.
+2. Arduino prints the readings over USB serial.
+3. A Python serial bridge on your computer reads the serial output.
+4. The bridge sends the readings to the Flask backend.
+5. The backend stores the readings in MongoDB and computes a crop health score.
+6. You query the API or dashboard for the latest status and alerts.
 
 In short:
 
-ESP32 or fake sensor -> MQTT broker -> ingestion -> Redis -> preprocessing -> Redis -> inference/dashboard
+Arduino sensors -> USB serial -> Python bridge -> Flask API -> MongoDB -> predictions/analytics
 
 ## Project Structure
 
@@ -27,152 +30,64 @@ ESP32 or fake sensor -> MQTT broker -> ingestion -> Redis -> preprocessing -> Re
 - [.env](.env): local environment values used by the containers.
 - [.env.example](.env.example): template file for environment variables.
 
-### ESP32 firmware
+### Arduino firmware
 
-- [esp32/main.ino](esp32/main.ino): Arduino firmware for the ESP32.
+- [aurdino-setup/arduino_sensor/arduino_sensor.ino](aurdino-setup/arduino_sensor/arduino_sensor.ino): Arduino sketch for DHT11 + soil moisture.
 
-This firmware:
-- connects the ESP32 to Wi-Fi,
-- connects to the MQTT broker,
-- reads DHT22 temperature and humidity,
+This sketch:
+- reads DHT11 temperature and humidity,
 - reads soil moisture from an analog pin,
-- publishes JSON messages to the MQTT topic `crop/sensors`.
+- prints the readings over USB serial every 2 seconds,
+- does not require Wi-Fi on the Arduino itself.
+
+### Serial bridge
+
+- [aurdino-setup/serial_bridge.py](aurdino-setup/serial_bridge.py): Python script that reads the Arduino serial output and posts it to the backend API.
 
 ### Services
 
-#### 1. Ingestion
-Folder: [services/ingestion](services/ingestion)
-
-Files:
-- [services/ingestion/main.py](services/ingestion/main.py)
-- [services/ingestion/s3_uploader.py](services/ingestion/s3_uploader.py)
-- [services/ingestion/requirements.txt](services/ingestion/requirements.txt)
-- [services/ingestion/Dockerfile](services/ingestion/Dockerfile)
+#### Backend API
+Folder: [backend/](backend)
 
 What it does:
-- subscribes to MQTT topic `crop/sensors`,
-- receives sensor payloads,
-- adds a server timestamp,
-- pushes the raw reading into Redis queue `preprocess_queue`,
-- optionally tries to save raw data to S3-style storage.
-
-#### 2. Preprocessing
-Folder: [services/preprocessing](services/preprocessing)
-
-Files:
-- [services/preprocessing/preprocess.py](services/preprocessing/preprocess.py)
-- [services/preprocessing/requirements.txt](services/preprocessing/requirements.txt)
-- [services/preprocessing/Dockerfile](services/preprocessing/Dockerfile)
-
-What it does:
-- reads items from Redis queue `preprocess_queue`,
-- normalizes sensor values,
-- computes a crop health score,
-- adds alert flags,
-- writes processed data into Redis list `dashboard_feed`,
-- also pushes data into `inference_queue`.
-
-#### 3. Training
-Folder: [services/training](services/training)
-
-Files:
-- [services/training/train.py](services/training/train.py)
-- [services/training/requirements.txt](services/training/requirements.txt)
-- [services/training/Dockerfile](services/training/Dockerfile)
-
-What it does:
-- loads processed sensor records,
-- fits a lightweight model,
-- saves the model for later inference.
-
-This service is meant to be run manually when you have enough data.
-
-#### 4. Inference
-Folder: [services/inference](services/inference)
-
-Files:
-- [services/inference/main.py](services/inference/main.py)
-- [services/inference/requirements.txt](services/inference/requirements.txt)
-- [services/inference/Dockerfile](services/inference/Dockerfile)
-
-What it does:
-- exposes a FastAPI endpoint at `/predict`,
-- exposes a FastAPI endpoint at `/history` for dashboard chart data,
-- returns a health score and advice,
-- uses the saved model if available,
-- falls back to a heuristic score if no model is loaded.
-
-#### 5. Dashboard
-Folder: [services/dashboard](services/dashboard)
-
-Files:
-- [services/dashboard/package.json](services/dashboard/package.json)
-- [services/dashboard/index.html](services/dashboard/index.html)
-- [services/dashboard/src/App.jsx](services/dashboard/src/App.jsx)
-- [services/dashboard/src/styles.css](services/dashboard/src/styles.css)
-- [services/dashboard/Dockerfile](services/dashboard/Dockerfile)
-
-What it does:
-- runs a React dashboard (Vite),
-- fetches live data from inference `/history`,
-- shows graphs for temperature, humidity, soil moisture, and health score,
-- calls the inference API when you request a prediction.
-
-#### 6. Fake sensor
-Folder: [services/fake_sensor](services/fake_sensor)
-
-Files:
-- [services/fake_sensor/publisher.py](services/fake_sensor/publisher.py)
-- [services/fake_sensor/requirements.txt](services/fake_sensor/requirements.txt)
-- [services/fake_sensor/Dockerfile](services/fake_sensor/Dockerfile)
-
-What it does:
-- publishes fake sensor readings to MQTT,
-- is only for demo/testing,
-- can be replaced later by the real ESP32.
-
-#### 7. Mosquitto config
-Folder: [mosquitto](mosquitto)
-
-File:
-- [mosquitto/mosquitto.conf](mosquitto/mosquitto.conf)
-
-What it does:
-- runs the MQTT broker,
-- accepts sensor messages on port `1883`.
+- exposes auth endpoints for user login/register,
+- exposes device registration and device management endpoints,
+- exposes sensor ingestion endpoints,
+- stores readings in MongoDB,
+- computes health scores and alerts.
 
 ## How The Data Flows
 
 Here is the full path of one reading:
 
-1. The fake sensor or ESP32 creates a JSON reading.
-2. The reading is published to MQTT topic `crop/sensors`.
-3. Ingestion receives the MQTT message.
-4. Ingestion adds a server timestamp and pushes the payload into Redis queue `preprocess_queue`.
-5. Preprocessing reads the payload from Redis.
-6. Preprocessing computes normalized values, health score, and alerts.
-7. The processed reading is stored in Redis list `dashboard_feed`.
-8. The dashboard reads `dashboard_feed` and draws live charts.
-9. The inference API can use the same data to return advice.
+1. The Arduino reads DHT11 humidity and temperature plus soil moisture.
+2. The Arduino prints a sensor line over USB serial.
+3. The Python bridge reads the serial line from your computer.
+4. The bridge sends a JSON POST to `/api/sensors/ingest`.
+5. The backend validates the payload and checks the device API key.
+6. The backend saves the reading in MongoDB.
+7. The backend calculates health score and alerts.
+8. You query the API for latest readings, history, alerts, or predictions.
 
 ## What You Need Installed
 
-To run the Docker stack:
+To run the backend and bridge:
 
 - Docker Desktop
 - Docker Compose
+- Python 3.10+ on your PC
+- Arduino IDE
 
-To use the real ESP32:
+To use the Arduino:
 
-- Arduino IDE or PlatformIO
-- ESP32 board support installed
-- DHT22 sensor
+- Arduino board connected by USB
+- DHT11 sensor
 - soil moisture sensor
-- USB cable for flashing the ESP32
+- jumper wires
 
 ## How To Run The Project
 
-### 1. Start the containers
+### 1. Start the backend
 
 From the project root:
 
@@ -181,83 +96,86 @@ docker compose up --build -d
 ```
 
 This starts:
-- mosquitto
-- redis
-- ingestion
-- preprocessing
-- inference
-- dashboard
-- fake-sensor
+- `mongo`
+- `flask-backend`
 
-### 2. Check that the containers are running
+### 2. Verify the backend
 
 ```bash
 docker compose ps
+curl http://localhost:5000/api/health
 ```
 
-You should see all services in `Up` state.
+If you are on PowerShell, use:
 
-### 3. Open the dashboard
-
-Open:
-
-```text
-http://localhost:8050
+```powershell
+Invoke-RestMethod http://localhost:5000/api/health
 ```
 
-### 4. Check the APIs
-
-Ingestion health:
+### 3. Prepare the Arduino bridge
 
 ```bash
-curl http://localhost:8000/health
+cd aurdino-setup
+pip install -r requirements.txt
 ```
 
-Inference health:
+### 4. Upload the Arduino sketch
+
+Open [aurdino-setup/arduino_sensor/arduino_sensor.ino](aurdino-setup/arduino_sensor/arduino_sensor.ino) and make sure:
+
+- `Serial.begin(9600)` matches the bridge baud rate
+- the sketch prints `[SENSOR] ...` lines over USB serial
+
+### 5. Run the serial bridge on your PC
 
 ```bash
-curl http://localhost:8001/health
+python serial_bridge.py --port COM3 --baudrate 9600 --backend http://localhost:5000 --device-id device_001 --api-key YOUR_DEVICE_API_KEY
+```
+
+Replace `COM3` with your Arduino port.
+
+### 6. Confirm data is arriving
+
+Use these endpoints after the bridge is running:
+
+```bash
+curl http://localhost:5000/api/health
+curl http://localhost:5000/api/sensors/latest/device_001
+curl http://localhost:5000/api/sensors/history/device_001?limit=10
+```
+
+On PowerShell:
+
+```powershell
+Invoke-RestMethod http://localhost:5000/api/sensors/latest/device_001 -Headers @{Authorization="Bearer YOUR_JWT_TOKEN"}
 ```
 
 ## How To Test It Manually
 
-### Test 1: MQTT publishing
+### Test 1: Serial output from Arduino
 
-Look at the fake sensor logs:
+Open the Arduino Serial Monitor at 9600 baud.
 
-```bash
-docker compose logs -f fake-sensor
+Expected output:
+
+```text
+[SENSOR] Temp: 28.00°C | Humidity: 65.00% | Soil: 45%
+[RAW] Soil Value: 512
+----------------------
 ```
 
-Expected:
-- you should see new fake readings being published every few seconds.
+### Test 2: Bridge posts to backend
 
-### Test 2: MQTT ingestion
+Run the bridge and watch for:
 
-Look at ingestion logs:
-
-```bash
-docker compose logs -f ingestion
+```text
+[BACKEND] POST to http://localhost:5000/api/sensors/ingest → HTTP 201
+[SUCCESS] Data sent to backend!
 ```
 
-Expected:
-- messages showing the payload was received,
-- data being queued into Redis.
+### Test 3: API data flow
 
-### Test 3: Redis queue flow
-
-Check queue sizes:
-
-```bash
-docker compose exec redis redis-cli LLEN preprocess_queue
-docker compose exec redis redis-cli LLEN inference_queue
-docker compose exec redis redis-cli LLEN dashboard_feed
-```
-
-How to read this:
-- `preprocess_queue` is where raw messages wait.
-- `inference_queue` holds processed data for prediction logic.
-- `dashboard_feed` is the live list used by the dashboard.
+Check that latest reading and history endpoints return data.
 
 ### Test 4: Inference API
 

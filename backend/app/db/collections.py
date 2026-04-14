@@ -1,0 +1,6 @@
+USERS = "users"
+DEVICES = "devices"
+SENSOR_READINGS = "sensor_readings"
+PREDICTIONS = "predictions"
+UPLOADS = "uploads"
+REPORTS = "reports"
