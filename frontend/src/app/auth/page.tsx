@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Mail, Lock, User, ArrowRight, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { setToken } from "@/lib/auth";
+
 
 function LeafLogo() {
   return (
@@ -59,6 +61,7 @@ export default function AuthPage() {
     }
 
     try {
+      // Try to connect to backend
       const response = await fetch(`${baseUrl}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -78,8 +81,10 @@ export default function AuthPage() {
         });
         
         if (isLogin) {
-          setTimeout(() => router.push("/"), 2000);
+          setToken(data.data.token);
+          setTimeout(() => router.push("/dashboard"), 2000);
         } else {
+
           setTimeout(() => {
             setIsLogin(true);
             setMessage(null);
@@ -88,8 +93,6 @@ export default function AuthPage() {
       } else {
         setMessage({ type: "error", text: data.message || "Authentication failed" });
       }
-    } catch (error) {
-      setMessage({ type: "error", text: "Could not connect to the server." });
     } finally {
       setLoading(false);
     }
@@ -176,22 +179,30 @@ export default function AuthPage() {
             </AnimatePresence>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {!isLogin && (
-                <div className="relative group">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-green-500 transition-colors" />
-                  <input
-                    type="text"
-                    name="name"
-                    placeholder="Full Name"
-                    required
-                    value={formData.name}
-                    onChange={handleChange}
-                    className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-400/20 focus:border-green-400 transition-all shadow-sm"
-                  />
-                </div>
-              )}
+              <AnimatePresence mode="wait">
+                {!isLogin && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                    animate={{ opacity: 1, height: "auto", marginBottom: 16 }}
+                    exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                    className="relative group overflow-hidden"
+                  >
 
-              <div className="relative group">
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-green-500 transition-colors" />
+                    <input
+                      type="text"
+                      name="name"
+                      placeholder="Full Name"
+                      required
+                      value={formData.name}
+                      onChange={handleChange}
+                      className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-400/20 focus:border-green-400 transition-all shadow-sm"
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="relative group">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-green-500 transition-colors" />
                 <input
                   type="email"
@@ -202,9 +213,9 @@ export default function AuthPage() {
                   onChange={handleChange}
                   className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-400/20 focus:border-green-400 transition-all shadow-sm"
                 />
-              </div>
+              </motion.div>
 
-              <div className="relative group">
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="relative group">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-green-500 transition-colors" />
                 <input
                   type="password"
@@ -215,10 +226,10 @@ export default function AuthPage() {
                   onChange={handleChange}
                   className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-400/20 focus:border-green-400 transition-all shadow-sm"
                 />
-              </div>
+              </motion.div>
 
               {!isLogin && (
-                <div className="relative group">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="relative group">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-green-500 transition-colors" />
                   <input
                     type="password"
@@ -229,50 +240,62 @@ export default function AuthPage() {
                     onChange={handleChange}
                     className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-400/20 focus:border-green-400 transition-all shadow-sm"
                   />
-                </div>
+                </motion.div>
               )}
 
               {isLogin && (
-                <div className="flex items-center justify-between px-1">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="flex items-center justify-between px-1 text-sm">
                   <label className="flex items-center gap-2 cursor-pointer group">
-                    <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer" />
-                    <span className="text-sm text-gray-500 group-hover:text-gray-700 transition-colors">Remember me</span>
+                    <div className="relative flex items-center">
+                        <input type="checkbox" className="peer w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer appearance-none border-2 checked:bg-green-600 checked:border-green-600 transition-all" />
+                        <CheckCircle2 className="absolute w-4 h-4 text-white opacity-0 peer-checked:opacity-100 pointer-events-none transition-opacity p-0.5" />
+                    </div>
+                    <span className="text-gray-500 group-hover:text-gray-700 transition-colors font-medium">Remember me</span>
                   </label>
-                  <Link href="/auth/forgot-password" className="text-sm font-semibold text-green-600 hover:text-green-700 hover:underline underline-offset-4 decoration-2">
+                  <Link href="/auth/forgot-password" className="font-bold text-green-600 hover:text-green-700 transition-colors">
                     Forgot Password?
                   </Link>
-                </div>
+                </motion.div>
               )}
 
-              <button
+              <motion.button
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
                 type="submit"
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-3 bg-green-600 text-white py-4 rounded-2xl font-bold text-lg hover:bg-green-700 hover:shadow-lg hover:shadow-green-200 active:scale-[0.98] transition-all disabled:opacity-70 disabled:pointer-events-none mt-4"
+                className="w-full flex items-center justify-center gap-3 bg-gray-900 text-white py-4 rounded-2xl font-bold text-lg hover:bg-green-600 hover:shadow-2xl hover:shadow-green-100 active:scale-[0.98] transition-all disabled:opacity-70 disabled:pointer-events-none mt-4 shadow-xl shadow-gray-200"
               >
                 {loading ? (
                   <Loader2 className="w-6 h-6 animate-spin" />
                 ) : (
                   <>
-                    {isLogin ? "Login Now" : "Create Account"}
+                    <span className="uppercase tracking-widest">{isLogin ? "Login Now" : "Create Account"}</span>
                     <ArrowRight className="w-5 h-5" />
                   </>
                 )}
-              </button>
+              </motion.button>
             </form>
 
-            <div className="mt-8 text-center pt-6 border-t border-gray-50">
-              <p className="text-gray-500 font-medium">
-                {isLogin ? "New to CropSense?" : "Already have an account?"}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className="mt-8 text-center pt-6 border-t border-gray-100"
+            >
+              <p className="text-gray-400 font-medium text-sm tracking-wide">
+                {isLogin ? "Don't have an account?" : "Already a member?"}
                 <button
                   onClick={() => setIsLogin(!isLogin)}
-                  className="ml-2 text-green-600 font-bold hover:text-green-700 transition-colors hover:underline"
+                  className="ml-2 text-green-600 font-black hover:text-green-700 transition-colors hover:underline decoration-2 underline-offset-4"
                 >
-                  {isLogin ? "Sign Up Free" : "Sign In"}
+                  {isLogin ? "JOIN NOW" : "SIGN IN"}
                 </button>
               </p>
-            </div>
+            </motion.div>
           </div>
         </motion.div>
+
       </div>
     </div>
   );

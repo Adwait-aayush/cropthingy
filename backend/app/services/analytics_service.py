@@ -4,11 +4,18 @@ from app.db.mongo import get_db
 from app.db.collections import SENSOR_READINGS, DEVICES
 
 
-def get_summary():
+def get_summary(owner_id: str = None):
     db = get_db()
-    total_devices = db[DEVICES].count_documents({})
-    total_readings = db[SENSOR_READINGS].count_documents({})
+    
+    device_filter = {"owner_id": owner_id} if owner_id else {}
+    device_ids = [d["device_id"] for d in db[DEVICES].find(device_filter, {"device_id": 1})]
+    
+    total_devices = len(device_ids)
+    reading_filter = {"device_id": {"$in": device_ids}} if owner_id else {}
+    total_readings = db[SENSOR_READINGS].count_documents(reading_filter)
+    
     pipeline = [
+        {"$match": reading_filter},
         {
             "$group": {
                 "_id": None,
@@ -49,9 +56,15 @@ def get_trends(device_id: str, limit: int = 200):
     ]
 
 
-def get_crop_overview():
+def get_crop_overview(owner_id: str = None):
     db = get_db()
+    
+    device_filter = {"owner_id": owner_id} if owner_id else {}
+    device_ids = [d["device_id"] for d in db[DEVICES].find(device_filter, {"device_id": 1})]
+    reading_filter = {"device_id": {"$in": device_ids}} if owner_id else {}
+
     pipeline = [
+        {"$match": reading_filter},
         {
             "$group": {
                 "_id": "$crop_type",

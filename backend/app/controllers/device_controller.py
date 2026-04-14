@@ -1,7 +1,7 @@
 from flask import request, g
 
 from app.schemas.device_schema import validate_device_payload
-from app.services.device_service import register_device
+from app.services.device_service import register_device, get_user_devices
 from app.utils.response import success_response, error_response
 
 
@@ -13,3 +13,9 @@ def register():
         return success_response(data, "Device registered", 201)
     except ValueError as exc:
         return error_response(str(exc), 400)
+
+
+def list_devices():
+    devices = get_user_devices(g.user["user_id"])
+    return success_response(devices, "Devices fetched")
+

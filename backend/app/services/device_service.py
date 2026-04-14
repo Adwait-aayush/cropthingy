@@ -33,3 +33,20 @@ def register_device(payload: dict, owner_id: str):
         "api_key": device_doc["api_key"],
         "created_at": device_doc["created_at"],
     }
+
+
+def get_user_devices(owner_id: str):
+    db = get_db()
+    cursor = db[DEVICES].find({"owner_id": owner_id})
+    return [
+        {
+            "id": str(doc["_id"]),
+            "device_id": doc["device_id"],
+            "name": doc["name"],
+            "crop_type": doc["crop_type"],
+            "location": doc["location"],
+            "created_at": doc.get("created_at"),
+        }
+        for doc in cursor
+    ]
+
