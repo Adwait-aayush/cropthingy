@@ -84,7 +84,7 @@ export default function ForgotPasswordPage() {
           </div>
 
           <div className="bg-white rounded-[2.5rem] shadow-xl shadow-gray-100 border border-gray-50 p-10 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 to-green-600" />
+            <div className="absolute top-0 left-0 w-full h-2 bg-linear-to-r from-green-400 to-green-600" />
             
             <p className="text-gray-500 mb-8 text-sm font-medium leading-relaxed">
               Enter the email address associated with your account and we&apos;ll send you a secure link to reset your password.
@@ -158,7 +158,7 @@ export default function ForgotPasswordPage() {
               </button>
 
               <div className="flex flex-col items-center text-center">
-                <div className="w-20 h-20 bg-green-50 rounded-[2rem] flex items-center justify-center mb-8">
+                <div className="w-20 h-20 bg-green-50 rounded-4xl flex items-center justify-center mb-8">
                   <Info className="w-10 h-10 text-green-600" />
                 </div>
                 
@@ -169,7 +169,7 @@ export default function ForgotPasswordPage() {
 
                 <button
                   onClick={() => setShowModal(false)}
-                  className="w-full bg-gray-900 text-white py-5 rounded-[2rem] font-black uppercase tracking-widest text-xs hover:bg-green-600 transition-all active:scale-[0.98] shadow-xl shadow-gray-100"
+                  className="w-full bg-gray-900 text-white py-5 rounded-4xl font-black uppercase tracking-widest text-xs hover:bg-green-600 transition-all active:scale-[0.98] shadow-xl shadow-gray-200"
                 >
                   Return to Dashboard
                 </button>

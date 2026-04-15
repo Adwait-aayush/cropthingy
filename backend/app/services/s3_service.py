@@ -28,7 +28,8 @@ def upload_json(prefix: str, filename: str, payload: dict) -> str | None:
         return None
 
     key = f"{prefix}/{filename}"
-    content = json.dumps(payload).encode("utf-8")
+    # Mongo documents may contain ObjectId values after insert_one mutates input dict.
+    content = json.dumps(payload, default=str).encode("utf-8")
     _client().upload_fileobj(io.BytesIO(content), current_app.config["S3_BUCKET"], key)
     return key
 
