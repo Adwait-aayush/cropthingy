@@ -1,24 +1,9 @@
 version: "3.9"
 
 services:
-  mongo:
-    image: mongo:7
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-    restart: unless-stopped
-
   flask-backend:
     build: ./backend
     env_file: ./backend/.env
-    environment:
-      - MONGO_URI=mongodb://mongo:27017
     ports:
       - "5000:5000"
-    depends_on:
-      - mongo
     restart: unless-stopped
-
-volumes:
-  mongo_data:

@@ -2,8 +2,32 @@ from __future__ import annotations
 
 from app.db.mongo import get_db
 from app.db.collections import SENSOR_READINGS, PREDICTIONS, DEVICES
-from app.ml.crop_health_model import model_predict
 from app.utils.helpers import utc_now_iso
+
+
+def model_predict(temperature: float, humidity: float, soil_moisture: float, crop_type: str):
+    """Simple health score calculation based on sensor readings."""
+    score = 50.0  # Base score
+    
+    # Temperature adjustment (ideal 20-30°C)
+    if 20 <= temperature <= 30:
+        score += 20
+    elif 15 <= temperature <= 35:
+        score += 10
+    
+    # Humidity adjustment (ideal 40-70%)
+    if 40 <= humidity <= 70:
+        score += 20
+    elif 30 <= humidity <= 80:
+        score += 10
+    
+    # Soil moisture adjustment (ideal 40-60%)
+    if 40 <= soil_moisture <= 60:
+        score += 30
+    elif 30 <= soil_moisture <= 70:
+        score += 15
+    
+    return min(100.0, score), "mock-health-calculator"
 
 
 def _recommendation(score: float) -> str:

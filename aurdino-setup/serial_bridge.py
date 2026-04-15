@@ -10,6 +10,7 @@ import json
 import requests
 import time
 import argparse
+import re
 from datetime import datetime
 import sys
 
@@ -22,6 +23,8 @@ class ArduinoSerialBridge:
         self.api_key = api_key
         self.ser = None
         self.connected = False
+        self.pending_reading = {}
+        self.backend_enabled = bool(backend_url)
         
     def connect(self):
         """Connect to Arduino serial port"""
@@ -39,28 +42,48 @@ class ArduinoSerialBridge:
     
     def parse_sensor_line(self, line):
         """Parse sensor data from Arduino serial output"""
-        # Example: "[SENSOR] Temp: 28.50°C | Humidity: 65.30% | Soil: 45%"
-        if "[SENSOR]" not in line:
-            return None
-        
-        try:
-            # Extract values using simple parsing
-            parts = line.split("|")
-            temp_part = parts[0].split(":")[-1].replace("°C", "").strip()
-            humidity_part = parts[1].split(":")[-1].replace("%", "").strip()
-            soil_part = parts[2].split(":")[-1].replace("%", "").strip()
-            
-            return {
-                "temperature": float(temp_part),
-                "humidity": float(humidity_part),
-                "soil_moisture": float(soil_part),
-            }
-        except Exception as e:
-            print(f"[PARSE ERROR] {e}: {line}")
-            return None
+        parsed = {}
+
+        # Format 1: "[SENSOR] Temp: 28.50°C | Humidity: 65.30% | Soil: 45%"
+        if "[SENSOR]" in line:
+            try:
+                parts = line.split("|")
+                temp_part = parts[0].split(":")[-1].replace("°C", "").strip()
+                humidity_part = parts[1].split(":")[-1].replace("%", "").strip()
+                soil_part = parts[2].split(":")[-1].replace("%", "").strip()
+
+                return {
+                    "temperature": float(temp_part),
+                    "humidity": float(humidity_part),
+                    "soil_moisture": float(soil_part),
+                }
+            except Exception as e:
+                print(f"[PARSE ERROR] {e}: {line}")
+                return None
+
+        # Format 2: "Temp: 28.5 °C | Humidity: 65.3 %" (with or without emojis)
+        temp_humidity = re.search(
+            r"Temp:\s*([+-]?\d+(?:\.\d+)?)\s*°?C\s*\|\s*.*Humidity:\s*([+-]?\d+(?:\.\d+)?)\s*%",
+            line,
+            re.IGNORECASE,
+        )
+        if temp_humidity:
+            parsed["temperature"] = float(temp_humidity.group(1))
+            parsed["humidity"] = float(temp_humidity.group(2))
+
+        # Format 3: "Soil Moisture: 45 %" (with or without emojis)
+        soil = re.search(r"Soil\s+Moisture:\s*([+-]?\d+(?:\.\d+)?)\s*%", line, re.IGNORECASE)
+        if soil:
+            parsed["soil_moisture"] = float(soil.group(1))
+
+        return parsed or None
     
     def send_to_backend(self, temp, humidity, soil):
         """Send sensor data to backend API"""
+        if not self.backend_enabled:
+            print("[BACKEND] Skipped (no backend configured)")
+            return True
+
         payload = {
             "device_id": self.device_id,
             "temperature": temp,
@@ -110,13 +133,22 @@ class ArduinoSerialBridge:
                     # Try to parse sensor data
                     sensor_data = self.parse_sensor_line(line)
                     if sensor_data:
-                        print(f"[DATA] {sensor_data}")
-                        self.send_to_backend(
-                            sensor_data["temperature"],
-                            sensor_data["humidity"],
-                            sensor_data["soil_moisture"]
-                        )
-                        print("-" * 60)
+                        self.pending_reading.update(sensor_data)
+
+                        if all(k in self.pending_reading for k in ("temperature", "humidity", "soil_moisture")):
+                            payload = {
+                                "temperature": self.pending_reading["temperature"],
+                                "humidity": self.pending_reading["humidity"],
+                                "soil_moisture": self.pending_reading["soil_moisture"],
+                            }
+                            print(f"[DATA] {payload}")
+                            self.send_to_backend(
+                                payload["temperature"],
+                                payload["humidity"],
+                                payload["soil_moisture"],
+                            )
+                            self.pending_reading = {}
+                            print("-" * 60)
                 
                 time.sleep(0.1)
         
@@ -129,18 +161,20 @@ class ArduinoSerialBridge:
 
 def main():
     parser = argparse.ArgumentParser(description="Arduino Serial Bridge")
-    parser.add_argument("--port", default="COM3", help="Serial port (default: COM3)")
+    parser.add_argument("--port", default="COM5", help="Serial port (default: COM5)")
     parser.add_argument("--baudrate", type=int, default=9600, help="Baud rate (default: 9600)")
-    parser.add_argument("--backend", default="http://localhost:5000", help="Backend URL")
+    parser.add_argument("--backend", default="http://localhost:5000", help="Backend URL (leave empty to disable backend posting)")
     parser.add_argument("--device-id", default="device_001", help="Device ID")
     parser.add_argument("--api-key", default="dev-device-key", help="Device API key")
     
     args = parser.parse_args()
+
+    backend_url = args.backend.strip() if args.backend else ""
     
     bridge = ArduinoSerialBridge(
         port=args.port,
         baudrate=args.baudrate,
-        backend_url=args.backend,
+        backend_url=backend_url,
         device_id=args.device_id,
         api_key=args.api_key
     )
