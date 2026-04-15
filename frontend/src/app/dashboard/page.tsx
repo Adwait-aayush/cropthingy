@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
+import {
   Leaf, 
   Bell, 
   LogOut, 
@@ -157,6 +157,40 @@ function MiniChart({ data, color = "#10b981", label, height = 60 }: { data: numb
   );
 }
 
+const ALERT_META: Record<string, { title: string; message: string; severity: "critical" | "warning" }> = {
+  temperature_high: {
+    title: "High Temperature",
+    message: "Temperature is above the safe range for this crop.",
+    severity: "critical",
+  },
+  temperature_low: {
+    title: "Low Temperature",
+    message: "Temperature is below the expected operational range.",
+    severity: "warning",
+  },
+  humidity_low: {
+    title: "Low Humidity",
+    message: "Humidity dropped under the recommended threshold.",
+    severity: "warning",
+  },
+  soil_moisture_low: {
+    title: "Low Soil Moisture",
+    message: "Soil moisture is too low. Irrigation may be required.",
+    severity: "critical",
+  },
+  soil_moisture_high: {
+    title: "High Soil Moisture",
+    message: "Soil moisture is above normal. Check drainage conditions.",
+    severity: "warning",
+  },
+};
+
+function formatAlertCode(code: string): string {
+  return code
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 
 // --- Main Dashboard ---
 
@@ -172,6 +206,7 @@ export default function Dashboard() {
   const [prediction, setPrediction] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const isFetchingRef = useRef(false);
 
 
 
@@ -189,6 +224,31 @@ export default function Dashboard() {
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type, isVisible: true });
   };
+
+  const incidentItems = useMemo(() => {
+    return alerts.flatMap((reading: any, readingIdx: number) => {
+      const alertCodes: string[] = Array.isArray(reading?.alerts) ? reading.alerts : [];
+
+      return alertCodes.map((code, codeIdx) => {
+        const meta = ALERT_META[code] || {
+          title: formatAlertCode(code),
+          message: "Threshold anomaly detected in latest reading.",
+          severity: "warning" as const,
+        };
+
+        return {
+          id: `${reading.id || readingIdx}-${codeIdx}`,
+          title: meta.title,
+          message: meta.message,
+          severity: meta.severity,
+          deviceId: reading.device_id || "Unknown Device",
+          timestamp: reading.timestamp,
+        };
+      });
+    });
+  }, [alerts]);
+
+  const latestIncident = incidentItems[0] || null;
 
   const fetchAvailableDevices = async () => {
     setIsLoadingAvailable(true);
@@ -234,8 +294,16 @@ export default function Dashboard() {
 
 
 
-  const fetchDashboardData = async () => {
-    setIsRefreshing(true);
+  const fetchDashboardData = useCallback(async (options: { silent?: boolean } = {}) => {
+    if (isFetchingRef.current) {
+      return;
+    }
+
+    isFetchingRef.current = true;
+    if (!options.silent) {
+      setIsRefreshing(true);
+    }
+
     try {
       // Fetch data from backend only
       const token = getToken();
@@ -301,13 +369,15 @@ export default function Dashboard() {
 
       } catch (error) {
         console.error('Failed to fetch data from backend:', error);
-        throw error; // Let the error boundary handle it
       }
     } finally {
       setLoading(false);
-      setIsRefreshing(false);
+      if (!options.silent) {
+        setIsRefreshing(false);
+      }
+      isFetchingRef.current = false;
     }
-  };
+  }, [router, selectedDeviceId]);
 
 
   useEffect(() => {
@@ -320,14 +390,27 @@ export default function Dashboard() {
     }
     
     fetchDashboardData();
-    
-    // Auto-refresh data every 30 seconds
-    const interval = setInterval(() => {
-      fetchDashboardData();
-    }, 30000);
-    
-    return () => clearInterval(interval);
-  }, [selectedDeviceId]);
+
+    // Poll every 2 seconds for near-live updates when tab is visible.
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void fetchDashboardData({ silent: true });
+      }
+    }, 2000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void fetchDashboardData({ silent: true });
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchDashboardData, router]);
 
   const handleLogout = () => {
     removeToken();
@@ -412,10 +495,11 @@ export default function Dashboard() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-[#f8faf7] text-gray-800 p-4 md:p-10 font-sans selection:bg-green-200">
+      <div className="min-h-screen bg-[#f8faf7] text-gray-800 px-4 py-5 md:px-8 md:py-8 xl:px-10 font-sans selection:bg-green-200">
+      <div className="mx-auto w-full max-w-[1500px]">
       
       {/* Header */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
         <div>
           <div className="flex items-center gap-3 mb-1">
              <div className="bg-green-600 p-2 rounded-xl shadow-lg shadow-green-200">
@@ -431,7 +515,9 @@ export default function Dashboard() {
         <div className="flex items-center gap-4 bg-white p-2 rounded-2xl shadow-sm border border-gray-100">
           <motion.button 
             whileTap={{ scale: 0.9 }}
-            onClick={fetchDashboardData}
+            onClick={() => {
+              void fetchDashboardData();
+            }}
             className={`p-3 rounded-xl transition-colors ${isRefreshing ? "bg-green-100 text-green-600" : "bg-gray-50 text-gray-400 hover:bg-gray-100"}`}
           >
             <RefreshCw className={`w-5 h-5 ${isRefreshing ? "animate-spin" : ""}`} />
@@ -459,7 +545,7 @@ export default function Dashboard() {
       </header>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
         <StatCard 
             title="Total Devices" 
             value={summary?.total_devices || 0} 
@@ -488,7 +574,8 @@ export default function Dashboard() {
       </div>
 
       {/* Middle Section: Graphs */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">        <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-8">
+        <div className="lg:col-span-7 xl:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 group transition-all hover:shadow-md">
                 <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-3">
@@ -519,7 +606,7 @@ export default function Dashboard() {
                 <MiniChart data={sensorReadings.length > 0 ? sensorReadings.map((r: any) => r.soil_moisture) : []} color="#6366f1" label="Percent" height={70} />
             </div>
 
-            <div className="bg-white md:col-span-2 lg:col-span-3 rounded-2xl p-5 shadow-sm border border-gray-100 overflow-hidden relative group transition-all hover:shadow-md">
+            <div className="bg-white md:col-span-2 rounded-2xl p-5 shadow-sm border border-gray-100 overflow-hidden relative group transition-all hover:shadow-md">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                         <div className="p-1.5 bg-green-50 rounded-lg text-green-500"><BarChart3 className="w-5 h-5" /></div>
@@ -536,36 +623,36 @@ export default function Dashboard() {
         </div>
 
         {/* Sidebar: Alerts & Actions */}
-        <div className="flex flex-col gap-8">
+          <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-5">
             {/* Quick Actions */}
-            <div className="bg-green-900 rounded-[2.5rem] p-8 shadow-2xl text-white">
-                <h3 className="text-xl font-black mb-6 flex items-center gap-2">
+            <div className="bg-green-900 rounded-3xl p-6 shadow-xl text-white">
+               <h3 className="text-lg font-black mb-4 flex items-center gap-2">
                    Quick Actions <div className="w-2 h-2 bg-green-400 rounded-full animate-ping" />
                 </h3>
-                <div className="grid grid-cols-1 gap-4">
+               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
                    <button 
                     onClick={() => {
                       setIsClaimModalOpen(true);
                       fetchAvailableDevices();
                     }}
-                    className="flex items-center gap-4 bg-white/10 hover:bg-white/20 p-4 rounded-2xl transition-all border border-white/5 active:scale-95 group text-left"
+                  className="flex items-center gap-3 bg-white/10 hover:bg-white/20 p-3 rounded-2xl transition-all border border-white/5 active:scale-95 group text-left"
                    >
                       <div className="p-2 bg-green-500 rounded-xl"><Plus className="w-5 h-5" /></div>
-                      <span className="font-bold">Claim Device</span>
+                   <span className="font-bold text-sm">Claim Device</span>
                    </button>
                    <button 
                     onClick={() => setIsReportModalOpen(true)}
-                    className="flex items-center gap-4 bg-white/10 hover:bg-white/20 p-4 rounded-2xl transition-all border border-white/5 active:scale-95 group text-left"
+                  className="flex items-center gap-3 bg-white/10 hover:bg-white/20 p-3 rounded-2xl transition-all border border-white/5 active:scale-95 group text-left"
                    >
                       <div className="p-2 bg-blue-500 rounded-xl"><FileText className="w-5 h-5" /></div>
-                      <span className="font-bold">Generate Reports</span>
+                   <span className="font-bold text-sm">Generate Reports</span>
                    </button>
                                       <button 
                     onClick={handleExportData}
-                    className="flex items-center gap-4 bg-white/10 hover:bg-white/20 p-4 rounded-2xl transition-all border border-white/5 active:scale-95 group text-left"
+                  className="flex items-center gap-3 bg-white/10 hover:bg-white/20 p-3 rounded-2xl transition-all border border-white/5 active:scale-95 group text-left"
                    >
                       <div className="p-2 bg-orange-500 rounded-xl"><Download className="w-5 h-5" /></div>
-                      <span className="font-bold">Export Sensor Data</span>
+                   <span className="font-bold text-sm">Export Sensor Data</span>
                    </button>
 
                 </div>
@@ -573,7 +660,7 @@ export default function Dashboard() {
             </div>
 
             {/* Notifications / Alerts */}
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex-grow">
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex-grow">
                 <h3 className="font-black text-gray-800 uppercase tracking-widest text-sm mb-6 flex items-center justify-between">
                    AI Analysis & Predictions
                    <span className="bg-green-50 text-green-500 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Live Engine</span>
@@ -647,7 +734,7 @@ export default function Dashboard() {
             </div>
 
             {/* Hardware Status Indicator */}
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mt-6">
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className={`w-3 h-3 rounded-full ${sensorReadings.length > 0 ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-gray-300'} animate-pulse`} />
@@ -663,19 +750,19 @@ export default function Dashboard() {
             </div>
 
 
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex-grow mt-6">
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
                 <h3 className="font-black text-gray-800 uppercase tracking-widest text-sm mb-6 flex items-center justify-between">
-                   Recent Incidents 
-                   {alerts.length > 0 && (
+                 Latest Incident
+                 {latestIncident && (
                        <span className={`px-3 py-1 rounded-full text-[10px] font-black ${
-                           alerts.some(a => a.severity === 'critical') ? 'bg-rose-50 text-rose-500' : 'bg-amber-50 text-amber-500'
+                     latestIncident.severity === "critical" ? "bg-rose-50 text-rose-500" : "bg-amber-50 text-amber-500"
                        }`}>
-                           {alerts.length} ACTIVE
+                     ACTIVE
                        </span>
                    )}
                 </h3>
                 <div className="space-y-4">
-                   {alerts.length === 0 ? (
+                 {!latestIncident ? (
                        <div className="text-center py-8">
                            <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
                                <CheckCircle2 className="w-6 h-6 text-green-500" />
@@ -683,26 +770,35 @@ export default function Dashboard() {
                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">System Clear</p>
                        </div>
                    ) : (
-                       alerts.map((alert, idx) => (
-                           <motion.div 
-                            key={idx}
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className={`flex gap-4 p-4 rounded-2xl border transition-all hover:translate-x-2 ${
-                                alert.severity === 'critical' ? 'bg-rose-50/50 border-rose-100' : 'bg-amber-50/50 border-amber-100'
-                            }`}
-                           >
-                               <div className="p-2 h-fit bg-white rounded-xl shadow-sm">
-                                   <AlertTriangle className={`${alert.severity === 'critical' ? 'text-rose-500' : 'text-amber-500'} w-5 h-5`} />
-                               </div>
-                               <div>
-                                  <p className="font-black text-gray-800 text-sm tracking-tight">{alert.type}: {alert.device_id}</p>
-                                  <p className={`text-[10px] font-bold ${alert.severity === 'critical' ? 'text-rose-400' : 'text-amber-500'}`}>
-                                      {alert.message}
-                                  </p>
-                               </div>
-                           </motion.div>
-                       ))
+                       <motion.div 
+                        key={latestIncident.id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className={`group flex gap-4 p-4 rounded-2xl border transition-all hover:translate-x-1 hover:shadow-sm ${
+                            latestIncident.severity === "critical" ? "bg-rose-50/60 border-rose-100" : "bg-amber-50/60 border-amber-100"
+                        }`}
+                       >
+                           <div className="p-2 h-fit bg-white rounded-xl shadow-sm group-hover:scale-105 transition-transform">
+                               <AlertTriangle className={`${latestIncident.severity === "critical" ? "text-rose-500" : "text-amber-500"} w-5 h-5`} />
+                           </div>
+                           <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-3 mb-1">
+                                <p className="font-black text-gray-800 text-sm tracking-tight truncate">{latestIncident.title}</p>
+                                <span className={`shrink-0 px-2 py-1 rounded-full text-[9px] uppercase tracking-widest font-black ${
+                                  latestIncident.severity === "critical" ? "bg-rose-100 text-rose-600" : "bg-amber-100 text-amber-600"
+                                }`}>
+                                  {latestIncident.severity}
+                                </span>
+                              </div>
+                              <p className="text-[11px] font-semibold text-gray-600 leading-relaxed mb-2">
+                                  {latestIncident.message}
+                              </p>
+                              <div className="flex items-center justify-between gap-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                <span className="truncate">{latestIncident.deviceId}</span>
+                                <span>{latestIncident.timestamp ? new Date(latestIncident.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Now"}</span>
+                              </div>
+                           </div>
+                       </motion.div>
                    )}
                 </div>
             </div>
@@ -755,6 +851,7 @@ export default function Dashboard() {
       </footer>
 
       </div>
+        </div>
 
       {/* --- Modals & Overlays --- */}
 
