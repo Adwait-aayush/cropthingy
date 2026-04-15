@@ -1,5 +1,6 @@
 import os
 from flask import Flask
+from flask_cors import CORS
 
 from config import Config
 from app.db.mongo import init_mongo
@@ -16,6 +17,16 @@ from app.routes.analytics_routes import analytics_bp
 
 def create_app() -> Flask:
     app = Flask(__name__)
+    # Disable strict slashes to prevent redirects
+    app.url_map.strict_slashes = False
+    
+    # CORS(app, resources={r"/api/*": {"origins": "*"}})
+    CORS(app, resources={r"/api/*": {
+        "origins": "*",
+        "allow_headers": ["Content-Type", "Authorization", "X-API-KEY"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    }})
+
     app.config.from_object(Config)
 
     os.makedirs(app.config["UPLOAD_DIR"], exist_ok=True)
