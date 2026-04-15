@@ -3,6 +3,7 @@ import jwt
 from flask import request, g, current_app
 
 from app.utils.helpers import decode_jwt
+from app.utils.helpers import utc_now_iso
 from app.utils.response import error_response
 from app.db.mongo import get_db
 from app.db.collections import DEVICES
@@ -38,11 +39,33 @@ def device_api_key_required(fn):
             return error_response("X-API-KEY header and device_id are required", 401)
 
         db = get_db()
-        device = db[DEVICES].find_one({"device_id": device_id})
-        if not device:
-            return error_response("Device not registered", 404)
+        devices = db[DEVICES]
+        now = utc_now_iso()
+        device = devices.find_one({"device_id": device_id})
 
-        accepted_keys = {current_app.config["DEVICE_MASTER_API_KEY"]}
+        master_key = current_app.config["DEVICE_MASTER_API_KEY"]
+        if not device:
+            if api_key != master_key:
+                return error_response("Device not registered", 404)
+
+            # First data from a field unit can bootstrap an unclaimed device record.
+            devices.update_one(
+                {"device_id": device_id},
+                {
+                    "$setOnInsert": {
+                        "device_id": device_id,
+                        "name": f"Auto {device_id}",
+                        "crop_type": "unknown",
+                        "location": "unknown",
+                        "claimed": False,
+                        "created_at": now,
+                    },
+                },
+                upsert=True,
+            )
+            device = devices.find_one({"device_id": device_id})
+
+        accepted_keys = {master_key}
         if device.get("api_key"):
             accepted_keys.add(device["api_key"])
 

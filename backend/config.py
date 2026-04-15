@@ -16,7 +16,6 @@ class Config:
     MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "smart_farming")
 
     DEVICE_MASTER_API_KEY = os.getenv("DEVICE_MASTER_API_KEY", "dev-device-key")
-
     S3_ENABLED = os.getenv("S3_ENABLED", "false").lower() == "true"
     AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "")
     AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "")

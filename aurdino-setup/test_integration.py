@@ -72,9 +72,24 @@ def test_device_registration(backend_url):
             return False, None
         
         device_data = device_resp.json()["data"]
-        api_key = device_data["api_key"]
         print(f"  ✓ Device registered")
         print(f"    Device ID: {device_data['device_id']}")
+
+        # Claim device to get per-device API key
+        print("  - Claiming device...")
+        claim_resp = requests.post(
+            f"{backend_url}/api/devices/claim",
+            json={"device_id": device_data["device_id"]},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5,
+        )
+
+        if claim_resp.status_code != 201:
+            print(f"  ✗ Device claim failed: {claim_resp.text}")
+            return False, None
+
+        claim_data = claim_resp.json()["data"]
+        api_key = claim_data["api_key"]
         print(f"    API Key: {api_key}")
         
         return True, api_key

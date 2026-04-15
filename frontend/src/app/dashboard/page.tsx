@@ -164,6 +164,7 @@ export default function Dashboard() {
   const router = useRouter();
   const [summary, setSummary] = useState<any>(null);
   const [devices, setDevices] = useState<any[]>([]);
+  const [availableDevices, setAvailableDevices] = useState<any[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [recentReadings, setRecentReadings] = useState<any[]>([]);
   const [sensorReadings, setSensorReadings] = useState<any[]>([]);
@@ -175,9 +176,10 @@ export default function Dashboard() {
 
 
   // Modal & Toast States
-  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const [isLoadingAvailable, setIsLoadingAvailable] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType; isVisible: boolean }>({
     message: "",
     type: "info",
@@ -187,6 +189,48 @@ export default function Dashboard() {
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type, isVisible: true });
   };
+
+  const fetchAvailableDevices = async () => {
+    setIsLoadingAvailable(true);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/devices/available`);
+      if (response.ok) {
+        const json = await response.json();
+        setAvailableDevices(json.data || []);
+      } else {
+        showToast("Failed to load available devices", "error");
+      }
+    } catch (err) {
+      showToast("Error loading devices", "error");
+    } finally {
+      setIsLoadingAvailable(false);
+    }
+  };
+
+  const handleClaimDevice = async (deviceId: string) => {
+    setIsActionLoading(true);
+    try {
+      const res = await fetchWithAuth("/api/devices/claim", {
+        method: "POST",
+        body: JSON.stringify({ device_id: deviceId }),
+      });
+      if (res.ok) {
+        showToast("Device claimed successfully!", "success");
+        setIsClaimModalOpen(false);
+        await fetchDashboardData();
+        // Auto-select the newly claimed device
+        setSelectedDeviceId(deviceId);
+      } else {
+        const err = await res.json();
+        showToast(err.message || "Failed to claim device", "error");
+      }
+    } catch (err) {
+      showToast("Network error occurred", "error");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
 
 
 
@@ -290,38 +334,6 @@ export default function Dashboard() {
     router.push("/auth");
   };
 
-  const handleRegisterDevice = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setIsActionLoading(true);
-    const formData = new FormData(e.currentTarget);
-    const data = {
-        device_id: formData.get("device_id"),
-        name: formData.get("name"),
-        crop_type: formData.get("crop_type"),
-        location: formData.get("location"),
-    };
-
-    try {
-        const res = await fetchWithAuth("/api/devices/register", {
-            method: "POST",
-            body: JSON.stringify(data),
-        });
-        if (res.ok) {
-            showToast("Device registered successfully!", "success");
-            setIsRegisterModalOpen(false);
-            // After registration, select the new device automatically
-            setSelectedDeviceId(data.device_id as string);
-            fetchDashboardData();
-        } else {
-            const err = await res.json();
-            showToast(err.message || "Registration failed", "error");
-        }
-    } catch (err) {
-        showToast("Network error occurred", "error");
-    } finally {
-        setIsActionLoading(false);
-    }
-  };
 
   const handleExportData = async () => {
 
@@ -532,11 +544,14 @@ export default function Dashboard() {
                 </h3>
                 <div className="grid grid-cols-1 gap-4">
                    <button 
-                    onClick={() => setIsRegisterModalOpen(true)}
+                    onClick={() => {
+                      setIsClaimModalOpen(true);
+                      fetchAvailableDevices();
+                    }}
                     className="flex items-center gap-4 bg-white/10 hover:bg-white/20 p-4 rounded-2xl transition-all border border-white/5 active:scale-95 group text-left"
                    >
                       <div className="p-2 bg-green-500 rounded-xl"><Plus className="w-5 h-5" /></div>
-                      <span className="font-bold">Register Device</span>
+                      <span className="font-bold">Claim Device</span>
                    </button>
                    <button 
                     onClick={() => setIsReportModalOpen(true)}
@@ -586,9 +601,17 @@ export default function Dashboard() {
                                 </div>
                             </div>
 
-                            <div>
-                                <h4 className="font-black text-gray-800 uppercase tracking-tighter text-lg">Health Score</h4>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Predicted for {selectedDeviceId}</p>
+                            <div className="flex-1">
+                                <h4 className="font-black text-gray-800 uppercase tracking-tighter text-lg">Combined Analysis</h4>
+                                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-4">Predicted for {selectedDeviceId}</p>
+                                
+                                <div className={`px-4 py-3 rounded-xl font-bold text-sm uppercase tracking-widest transition-all ${
+                                    prediction.irrigation_needed === 1 
+                                        ? 'bg-red-100 text-red-700 border-l-4 border-red-500' 
+                                        : 'bg-blue-100 text-blue-700 border-l-4 border-blue-500'
+                                }`}>
+                                    💧 Irrigation: {prediction.irrigation_needed === 1 ? 'NEEDED' : 'SUFFICIENT'}
+                                </div>
                             </div>
                         </div>
 
@@ -604,8 +627,8 @@ export default function Dashboard() {
                                 "{prediction.recommendation || 'Analyzing environmental conditions...'}"
                             </p>
                             <div className="grid grid-cols-2 gap-2 pt-4 border-t border-white/20 relative z-10">
-                                <div className="text-[9px] font-black uppercase tracking-widest opacity-60">Engine: {prediction.model_used || 'GPT-Crop'}</div>
-                                <div className="text-[9px] font-black uppercase tracking-widest opacity-60 text-right">Confidence: High</div>
+                                <div className="text-[9px] font-black uppercase tracking-widest opacity-60">Health: {prediction.model_used || 'GPT-Crop'}</div>
+                                <div className="text-[9px] font-black uppercase tracking-widest opacity-60 text-right">Irrigation: {prediction.irrigation_model || 'N/A'}</div>
                             </div>
                         </div>
 
@@ -736,48 +759,54 @@ export default function Dashboard() {
       {/* --- Modals & Overlays --- */}
 
       <Modal 
-        isOpen={isRegisterModalOpen} 
-        onClose={() => setIsRegisterModalOpen(false)} 
-        title="Register New Sensor"
+        isOpen={isClaimModalOpen} 
+        onClose={() => setIsClaimModalOpen(false)} 
+        title="Claim Available Device"
       >
-        <form className="space-y-4" onSubmit={handleRegisterDevice}>
-
-            <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Device ID</label>
-                <input name="device_id" required className="w-full bg-gray-50 border-none rounded-2xl px-5 py-3 focus:ring-2 focus:ring-green-500 transition-all outline-none" placeholder="e.g. SENSOR-99" />
+        {isLoadingAvailable ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 text-green-600 animate-spin mb-4" />
+            <p className="text-gray-400 font-bold">Loading available devices...</p>
+          </div>
+        ) : availableDevices.length === 0 ? (
+          <div className="text-center py-12 px-6">
+            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Cpu className="w-8 h-8 text-gray-300" />
             </div>
-            <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Device Name</label>
-                <input name="name" required className="w-full bg-gray-50 border-none rounded-2xl px-5 py-3 focus:ring-2 focus:ring-green-500 transition-all outline-none" placeholder="e.g. North Hub" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Crop Type</label>
-                    <select 
-                      name="crop_type" 
-                      required 
-                      className="w-full bg-gray-50 border-none rounded-2xl px-5 py-3 focus:ring-2 focus:ring-green-500 transition-all outline-none appearance-none cursor-pointer font-bold text-sm"
-                    >
-                        <option value="Wheat">Wheat</option>
-                        <option value="Rice">Rice</option>
-                        <option value="Corn">Corn (Maize)</option>
-                        <option value="Pulses">Pulses</option>
-                    </select>
-                </div>
-
-                <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Location</label>
-                    <input name="location" required className="w-full bg-gray-50 border-none rounded-2xl px-5 py-3 focus:ring-2 focus:ring-green-500 transition-all outline-none" placeholder="Sector 1" />
-                </div>
-            </div>
-            <button 
-                type="submit" 
+            <h4 className="font-black text-gray-800 mb-1">No Devices Available</h4>
+            <p className="text-xs text-gray-400 font-bold">All devices have been claimed. Check back soon for new deployments.</p>
+          </div>
+        ) : (
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-4">Select a device to claim:</p>
+            {availableDevices.map((device) => (
+              <motion.button
+                key={device.device_id}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => handleClaimDevice(device.device_id)}
                 disabled={isActionLoading}
-                className="w-full bg-gray-900 text-white font-black py-4 rounded-3xl hover:bg-green-600 transition-all shadow-xl shadow-gray-200 uppercase tracking-widest disabled:opacity-50"
-            >
-                {isActionLoading ? "Processing..." : "Register Device"}
-            </button>
-        </form>
+                className="w-full text-left p-4 bg-gray-50 hover:bg-green-50 border-2 border-gray-100 hover:border-green-200 rounded-2xl transition-all disabled:opacity-50"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h4 className="font-black text-gray-800 uppercase tracking-tight">{device.device_id}</h4>
+                    <p className="text-sm font-bold text-gray-600">{device.name}</p>
+                    <div className="flex gap-3 mt-2">
+                      <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-bold uppercase tracking-widest">{device.crop_type}</span>
+                      <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-bold uppercase tracking-widest">{device.location}</span>
+                    </div>
+                  </div>
+                  {isActionLoading ? (
+                    <Loader2 className="w-5 h-5 text-green-600 animate-spin ml-2" />
+                  ) : (
+                    <CheckCircle2 className="w-5 h-5 text-gray-300 ml-2" />
+                  )}
+                </div>
+              </motion.button>
+            ))}
+          </div>
+        )}
       </Modal>
 
       <Modal 

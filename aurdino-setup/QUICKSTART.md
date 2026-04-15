@@ -102,6 +102,16 @@ If everything is working, the bridge terminal should show HTTP 201 responses and
 - If the backend rejects the request, check that the device API key matches the registered device.
 - If `localhost` does not work in the bridge, confirm the backend container is up and reachable on port 5000.
 
+## Quick Command Reference
+
+To start the serial bridge with your current setup (COM4 port + master API key):
+
+```powershell
+d:/cropthingy/.venv/Scripts/python.exe aurdino-setup/serial_bridge.py --port COM4 --backend http://localhost:5000 --device-id SERIAL_SCHEMA_001 --api-key replace_me_device_api_key
+```
+
+Run this in a separate PowerShell terminal whenever you want to stream sensor data.
+
 ## Notes
 
 - No ESP32 is required.

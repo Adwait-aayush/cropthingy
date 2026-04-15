@@ -1,8 +1,64 @@
 from __future__ import annotations
 
+import os
+import pickle
+import numpy as np
 from app.db.mongo import get_db
 from app.db.collections import SENSOR_READINGS, PREDICTIONS, DEVICES
 from app.utils.helpers import utc_now_iso
+
+# Try to load trained model at module import time
+_trained_model = None
+_scaler = None
+
+def _load_trained_model():
+    """Lazy load the trained Keras model and scaler."""
+    global _trained_model, _scaler
+    if _trained_model is not None:
+        return _trained_model, _scaler
+    
+    try:
+        from tensorflow.keras.models import load_model
+        model_path = os.path.join(os.path.dirname(__file__), '..', '..', 'trained_models', 'irrigation_model.keras')
+        scaler_path = os.path.join(os.path.dirname(__file__), '..', '..', 'trained_models', 'scaler.pkl')
+        
+        if os.path.exists(model_path) and os.path.exists(scaler_path):
+            _trained_model = load_model(model_path)
+            with open(scaler_path, 'rb') as f:
+                _scaler = pickle.load(f)
+            return _trained_model, _scaler
+    except Exception as e:
+        print(f"Warning: Could not load trained model: {e}")
+    
+    return None, None
+
+
+def model_predict_irrigation(temperature: float, humidity: float, soil_moisture: float, crop_type: str) -> tuple[int, str]:
+    """Predict irrigation need using trained Keras model."""
+    model, scaler = _load_trained_model()
+    if model is None or scaler is None:
+        return 0, "model-unavailable"
+    
+    try:
+        # Map crop type to numeric value
+        crop_map = {"rice": 0, "wheat": 1, "maize": 2, "vegetables": 3, "pulses": 4}
+        crop_numeric = crop_map.get(crop_type.lower(), 1)  # Default to wheat
+        
+        # Convert soil sensor reading (0-1023) to normalized value
+        soil_normalized = 1 - (soil_moisture / 1023.0)
+        
+        # Prepare input
+        input_data = np.array([[temperature, humidity, soil_normalized, crop_numeric]])
+        input_scaled = scaler.transform(input_data)
+        
+        # Get prediction
+        pred = model.predict(input_scaled, verbose=0)
+        irrigation_needed = int(pred[0][0] > 0.5)
+        
+        return irrigation_needed, "trained-logistic-model"
+    except Exception as e:
+        print(f"Error in model prediction: {e}")
+        return 0, "model-error"
 
 
 def model_predict(temperature: float, humidity: float, soil_moisture: float, crop_type: str):
@@ -53,7 +109,16 @@ def compute_prediction_for_device(device_id: str):
     device = db[DEVICES].find_one({"device_id": device_id})
     crop_type = device.get("crop_type", "wheat") if device else "wheat"
 
+    # Get rule-based health score
     pred_score, model_used = model_predict(
+        temperature=temp,
+        humidity=hum,
+        soil_moisture=soil,
+        crop_type=crop_type
+    )
+
+    # Get trained model irrigation prediction
+    irrigation_needed, irrigation_model = model_predict_irrigation(
         temperature=temp,
         humidity=hum,
         soil_moisture=soil,
@@ -66,6 +131,8 @@ def compute_prediction_for_device(device_id: str):
         "health_score": round(float(pred_score), 2),
         "recommendation": _recommendation(float(pred_score)),
         "model_used": model_used,
+        "irrigation_needed": irrigation_needed,
+        "irrigation_model": irrigation_model,
         "created_at": utc_now_iso(),
         "is_partial": "temperature" not in latest or "humidity" not in latest or "soil_moisture" not in latest
     }
