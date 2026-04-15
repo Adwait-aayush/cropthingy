@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 class Config:
     FLASK_ENV = os.getenv("FLASK_ENV", "development")
@@ -23,5 +25,12 @@ class Config:
     AWS_REGION = os.getenv("AWS_REGION", "ap-south-1")
     S3_BUCKET = os.getenv("S3_BUCKET", "")
 
-    UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
-    MODEL_PATH = os.getenv("MODEL_PATH", "trained_models/crop_health_model.pkl")
+    UPLOAD_DIR = os.getenv("UPLOAD_DIR", os.path.join(BASE_DIR, "uploads"))
+    IRRIGATION_MODEL_PATH = os.getenv(
+        "IRRIGATION_MODEL_PATH",
+        os.path.join(BASE_DIR, "trained_models", "irrigation_model.keras"),
+    )
+    IRRIGATION_SCALER_PATH = os.getenv(
+        "IRRIGATION_SCALER_PATH",
+        os.path.join(BASE_DIR, "trained_models", "scaler.pkl"),
+    )

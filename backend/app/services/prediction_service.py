@@ -2,16 +2,10 @@ from __future__ import annotations
 
 from app.db.mongo import get_db
 from app.db.collections import SENSOR_READINGS, PREDICTIONS, DEVICES
-from app.ml.crop_health_model import model_predict
+# from app.ml.crop_health_model import model_predict
+from app.db.collections import SENSOR_READINGS, PREDICTIONS
+from app.services.irrigation_prediction_service import predict_irrigation
 from app.utils.helpers import utc_now_iso
-
-
-def _recommendation(score: float) -> str:
-    if score >= 80:
-        return "Crop conditions are good. Keep current irrigation and monitor daily."
-    if score >= 60:
-        return "Moderate risk. Slightly increase monitoring and adjust irrigation schedule."
-    return "High stress detected. Irrigate soon and inspect for disease or nutrient issues."
 
 
 def compute_prediction_for_device(device_id: str):
@@ -38,10 +32,14 @@ def compute_prediction_for_device(device_id: str):
 
     doc = {
         "device_id": device_id,
-        "source_reading_id": str(latest["_id"]),
-        "health_score": round(float(pred_score), 2),
-        "recommendation": _recommendation(float(pred_score)),
-        "model_used": model_used,
+        "source_reading_id": pred.get("source_reading_id") or str(latest["_id"]),
+        "temperature": pred["temperature"],
+        "humidity": pred["humidity"],
+        "soil_moisture": pred["soil_moisture"],
+        "crop": pred["crop"],
+        "irrigation": pred["irrigation"],
+        "probability": pred["probability"],
+        "model_used": pred["model_used"],
         "created_at": utc_now_iso(),
         "is_partial": "temperature" not in latest or "humidity" not in latest or "soil_moisture" not in latest
     }

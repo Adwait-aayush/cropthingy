@@ -177,16 +177,22 @@ Run the bridge and watch for:
 
 Check that latest reading and history endpoints return data.
 
-### Test 4: Inference API
+### Test 4: Irrigation Model API
 
-Send a sample request:
+Send a sample request against the backend prediction route:
 
 ```bash
-curl -X POST http://localhost:8001/predict -H "Content-Type: application/json" -d "{\"crop_type\":\"wheat\",\"temperature\":28,\"humidity\":60,\"soil_moisture\":45}"
+curl -X POST http://localhost:5000/api/predictions/irrigation -H "Authorization: Bearer YOUR_JWT_TOKEN" -H "Content-Type: application/json" -d "{\"device_id\":\"device_001\"}"
+```
+
+You can also send the inputs directly:
+
+```bash
+curl -X POST http://localhost:5000/api/predictions/irrigation -H "Authorization: Bearer YOUR_JWT_TOKEN" -H "Content-Type: application/json" -d "{\"temperature\":28,\"humidity\":60,\"soil_moisture\":45,\"crop_type\":\"wheat\"}"
 ```
 
 Expected:
-- a JSON response with `health_score`, `advice`, and `model_used`.
+- a JSON response with `irrigation`, `probability`, and `model_used`.
 
 ### Test 5: Dashboard
 
