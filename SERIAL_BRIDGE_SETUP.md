@@ -1,309 +1,247 @@
-# Serial Bridge Configuration for Device Claiming
+# Serial Bridge Setup - Automatic Active Device Detection
 
 ## Overview
 
-The serial bridge script now needs to be configured with claimed device credentials instead of arbitrary device IDs. This document explains how to update `serial_bridge.py` for the new system.
+The serial bridge is now **super simple** - no need to manually specify device IDs anymore!
 
-## Setup Process
+✅ **One-time setup** → Authenticate your account  
+✅ **Then just specify port** → bridge auto-fetches active device  
+✅ **Switch devices in dashboard** → data automatically goes to active device  
+✅ **No restart needed** → just change selection in UI  
 
-### Step 1: User Claims Device in Frontend
-1. Login to http://localhost:3000/auth
-2. Click "Claim Device" in dashboard
-3. Select a device from the list
-4. Note down:
-   - `device_id`: e.g., "DEVICE_001"
-   - `api_key`: e.g., "f3aaf3ad94222cab53a5abc123456789"
+## How It Works
 
-### Step 2: Update Serial Bridge Configuration
-
-Create or update a config file `aurdino-setup/config.json`:
-
-```json
-{
-  "api_base_url": "http://localhost:5000",
-  "device_id": "DEVICE_001",
-  "api_key": "f3aaf3ad94222cab53a5abc123456789",
-  "serial_port": "COM4",
-  "baud_rate": 9600
-}
+```
+1. User authenticates bridge (first time only)
+   ↓
+2. User selects device in dashboard (turns GREEN)
+   ↓
+3. Bridge fetches active device from backend
+   ↓
+4. Arduino data → Serial Bridge → Backend (tagged with active device)
+   ↓
+5. Switch device in dashboard → data flows to new device (no restart!)
 ```
 
-### Step 3: Update serial_bridge.py
+## Getting Started (First Time)
 
-Replace the hardcoded values with configuration file loading:
+### Step 1: Authenticate
 
-```python
-#!/usr/bin/env python3
-"""
-Serial Bridge - Relay Arduino sensor data to backend
-Now requires device claiming and API key authentication
-"""
+Open terminal in `d:\cropthingy\aurdino-setup` and run setup:
 
-import serial
-import json
-import time
-import requests
-from datetime import datetime
-
-# Load configuration
-try:
-    with open('config.json', 'r') as f:
-        config = json.load(f)
-except FileNotFoundError:
-    print("ERROR: config.json not found!")
-    print("Please create config.json with device_id and api_key from claimed device")
-    exit(1)
-
-# Configuration from claimed device
-API_BASE_URL = config.get('api_base_url', 'http://localhost:5000')
-DEVICE_ID = config.get('device_id')
-API_KEY = config.get('api_key')
-SERIAL_PORT = config.get('serial_port', 'COM4')
-BAUD_RATE = config.get('baud_rate', 9600)
-
-if not DEVICE_ID or not API_KEY:
-    print("ERROR: device_id and api_key required in config.json!")
-    print("Please claim a device first and add credentials to config.json")
-    exit(1)
-
-print(f"Serial Bridge Configuration:")
-print(f"  Device ID: {DEVICE_ID}")
-print(f"  API Key: {API_KEY[:20]}...")
-print(f"  Serial Port: {SERIAL_PORT}")
-print(f"  Baud Rate: {BAUD_RATE}")
-print()
-
-# Headers with device authentication
-headers = {
-    "Content-Type": "application/json",
-    "X-API-KEY": API_KEY
-}
-
-# Try to connect to serial port
-try:
-    ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
-    print(f"✓ Connected to {SERIAL_PORT} at {BAUD_RATE} baud")
-except Exception as e:
-    print(f"✗ Failed to connect to {SERIAL_PORT}: {e}")
-    exit(1)
-
-# Data accumulation for multi-line Arduino output
-pending_reading = {}
-
-def send_to_backend(data):
-    """Send sensor reading to backend"""
-    try:
-        response = requests.post(
-            f"{API_BASE_URL}/api/sensors/ingest",
-            json={
-                "device_id": DEVICE_ID,
-                **data
-            },
-            headers=headers,
-            timeout=5
-        )
-        
-        if response.status_code == 201:
-            print(f"✓ [{datetime.now().strftime('%H:%M:%S')}] Data sent successfully")
-            return True
-        else:
-            print(f"✗ [{datetime.now().strftime('%H:%M:%S')}] API error: {response.status_code}")
-            print(f"  Response: {response.text}")
-            return False
-    except requests.exceptions.RequestException as e:
-        print(f"✗ [{datetime.now().strftime('%H:%M:%S')}] Network error: {e}")
-        return False
-
-def parse_arduino_reading(line):
-    """Parse single line of Arduino output"""
-    global pending_reading
-    
-    line = line.strip()
-    if not line:
-        return
-    
-    try:
-        if line.startswith("Temperature:"):
-            temp = float(line.split(":")[1].strip().split()[0])
-            pending_reading['temperature'] = temp
-            print(f"  Temperature: {temp}°C")
-            
-        elif line.startswith("Humidity:"):
-            humidity = float(line.split(":")[1].strip().split()[0])
-            pending_reading['humidity'] = humidity
-            print(f"  Humidity: {humidity}%")
-            
-        elif line.startswith("Soil:"):
-            soil = float(line.split(":")[1].strip().split()[0])
-            pending_reading['soil_moisture'] = soil
-            print(f"  Soil Moisture: {soil}%")
-            
-            # All three values received - send to backend
-            if len(pending_reading) == 3:
-                if send_to_backend(pending_reading):
-                    pending_reading = {}
-    except (IndexError, ValueError):
-        print(f"  Warning: Could not parse line: {line}")
-
-def main():
-    """Main serial reading loop"""
-    print("Starting serial bridge...")
-    print(f"Listening for Arduino data on {SERIAL_PORT}...")
-    print("(Press Ctrl+C to stop)\n")
-    
-    try:
-        while True:
-            if ser.in_waiting:
-                line = ser.readline().decode('utf-8', errors='ignore')
-                if line:
-                    parse_arduino_reading(line)
-            time.sleep(0.1)
-    except KeyboardInterrupt:
-        print("\n✓ Serial bridge stopped")
-    finally:
-        ser.close()
-        print("✓ Serial port closed")
-
-if __name__ == "__main__":
-    main()
-```
-
-## Configuration File Format
-
-### config.json Template
-```json
-{
-  "api_base_url": "http://localhost:5000",
-  "device_id": "DEVICE_001",
-  "api_key": "YOUR_API_KEY_HERE",
-  "serial_port": "COM4",
-  "baud_rate": 9600,
-  "retry_on_failure": true,
-  "retry_delay_seconds": 5
-}
-```
-
-### Windows Ports
-- `COM1`, `COM2`, `COM3`, `COM4`, etc.
-
-### Linux/Mac Ports
-- `/dev/ttyUSB0`, `/dev/ttyUSB1`
-- `/dev/ttyACM0`, `/dev/ttyACM1`
-- `/dev/cu.usbserial-*`
-
-## Complete Workflow
-
-### 1. Admin Pre-deployment
 ```bash
-cd backend
-python seed_devices.py
+python serial_bridge.py --setup
 ```
 
-### 2. User Claims Device
-- Login to dashboard
-- Click "Claim Device"
-- Select device → Note ID and API key
+You'll be prompted for:
+- **Email**: Your dashboard login email
+- **Password**: Your dashboard password
 
-### 3. Configure Serial Bridge
+**Note:** Credentials are stored securely in `~/.bridge_auth` (one computer only)
+
+```
+============================================================
+SERIAL BRIDGE SETUP
+============================================================
+This will authenticate with your backend account.
+Your credentials are stored securely on this machine.
+
+Email: john@farm.com
+Password: ••••••••
+[AUTH] Authenticating...
+[AUTH] Credentials saved to C:\Users\username\.bridge_auth
+[SUCCESS] Authenticated as: john@farm.com
+
+[NEXT] Run the bridge with:
+  python serial_bridge.py --port COM3
+
+The active device will be fetched automatically from dashboard!
+```
+
+### Step 2: Select Device in Dashboard
+
+1. Open http://localhost:3000
+2. Log in with your credentials  
+3. Find your device in the dashboard (Rice, Wheat, Maize, etc.)
+4. Click to select it (it turns **🟢 GREEN** = active)
+
+### Step 3: Run Serial Bridge
+
+Now it's simple - just specify port and baudrate:
+
 ```bash
-cd aurdino-setup
-# Create config.json with:
-# - device_id from step 2
-# - api_key from step 2
-# - serial_port (find using Device Manager on Windows)
+python serial_bridge.py --port COM3
 ```
 
-### 4. Run Serial Bridge
+Or even fully automatic (auto-detects port):
+
 ```bash
 python serial_bridge.py
 ```
 
-### 5. Monitor Data Flow
-- Backend receives data: `docker compose logs flask-backend | grep sensors`
-- Frontend displays real-time charts
-- Health score updates automatically
+That's it! The bridge will:
+- ✅ Load your stored credentials
+- ✅ Fetch the active device from the dashboard automatically
+- ✅ Connect to Arduino on the specified port
+- ✅ Stream sensor data to your active device
 
-## Error Handling
+```
+[INFO] Fetching active device from dashboard...
+[INFO] Using device: user_456_RICE
 
-### "Device ID does not exist"
-- Device not claimed yet
-- Verify device_id matches exactly (case-sensitive)
-- Run backend test: `python test_device_claim.py`
+[SUCCESS] Connected to COM3 at 9600 baud
+[INFO] Listening on COM3...
+```
 
-### "Invalid API Key"
-- API key incorrect or expired
-- Claim device again to generate new key
-- Update config.json with new key
+## Switching Devices (No Restart!)
 
-### "Connection refused"
-- Backend not running: `docker compose up -d`
-- Wrong API_BASE_URL in config
-- Check port: `docker ps`
+1. In dashboard: Click a different device → turns **🟢 GREEN**
+2. Serial data automatically flows to the new device
+3. **No need to restart the bridge!**
 
-### "Serial port COM4 not found"
-- Arduino not connected
-- Check Device Manager for COM port
-- Install CH340 drivers if needed
-- Try different COM port
+Try it:
+- Terminal running: `python serial_bridge.py --port COM3`
+- Dashboard: Click "Rice" → data goes to Rice
+- Dashboard: Click "Wheat" → data goes to Wheat (same bridge!)
+- Dashboard: Click "Maize" → data goes to Maize
 
-## Security Notes
+## Command Reference
 
-⚠️ **IMPORTANT:** Never commit config.json with real API keys to git!
+### Basic Usage
 
 ```bash
-# Add to .gitignore
-echo "config.json" >> .gitignore
+# Auto-detect port, use active device from dashboard
+python serial_bridge.py
+
+# Specify port
+python serial_bridge.py --port COM3
+
+# Specify port and custom backend
+python serial_bridge.py --port COM3 --backend http://localhost:5000
+
+# Custom baudrate
+python serial_bridge.py --port COM3 --baudrate 9600
 ```
 
-For team sharing, use template:
+### Setup & Maintenance
+
 ```bash
-# Create template
-cp config.json config.json.example
+# First time: authenticate
+python serial_bridge.py --setup
 
-# Share example (without keys)
-# Each user creates own config.json
+# Clear stored credentials
+python serial_bridge.py --clear-auth
+
+# Then re-authenticate on next run
+python serial_bridge.py --setup
 ```
 
-## Testing Serial Bridge
+## Troubleshooting
 
-### Quick Test Script
-```python
-import requests
-import json
+### "No credentials stored"
 
-config = json.load(open('config.json'))
+```bash
+# First time only - run setup
+python serial_bridge.py --setup
 
-# Test 1: Verify device exists
-response = requests.get(
-    f"{config['api_base_url']}/api/devices/available",
-    json={"device_id": config['device_id']}
-)
-print(f"Device exists: {response.status_code == 200}")
-
-# Test 2: Send test data
-headers = {"X-API-KEY": config['api_key'], "Content-Type": "application/json"}
-test_data = {
-    "device_id": config['device_id'],
-    "temperature": 25.5,
-    "humidity": 60.0,
-    "soil_moisture": 45.0
-}
-response = requests.post(
-    f"{config['api_base_url']}/api/sensors/ingest",
-    json=test_data,
-    headers=headers
-)
-print(f"Data ingestion: {response.status_code == 201}")
-if response.status_code != 201:
-    print(f"  Error: {response.text}")
+# Enter your email and password
 ```
 
-## Summary
+### "No active device configured"
 
-✓ Serial bridge now requires device claiming first
-✓ Credentials stored in config.json (not git-tracked)
-✓ Enhanced security with API key authentication
-✓ Better error handling and logging
-✓ Multi-device support (change config.json to switch devices)
+```bash
+[ERROR] No active device configured
+[TIP] Open dashboard and select a device first!
+```
 
-**Status: Ready for integration** 🔌
+**Solution:** Log in to dashboard at http://localhost:3000 and click on a device to make it active (🟢 GREEN).
+
+### "Failed to connect: could not open port 'COM3'"
+
+Port doesn't exist or is in use. Find available ports:
+
+```powershell
+# Windows PowerShell
+[System.IO.Ports.SerialPort]::GetPortNames()
+
+# Output: COM3, COM4, COM11, etc.
+```
+
+Then try:
+```bash
+python serial_bridge.py --port COM4
+```
+
+### "Failed to get active device: 401"
+
+Your token expired. Clear and re-authenticate:
+
+```bash
+python serial_bridge.py --clear-auth
+python serial_bridge.py --setup
+```
+
+## Security
+
+✅ **Credentials stored securely** on your machine only  
+✅ **NOT stored in git or version control**  
+✅ **File permissions: 0o600** (owner read/write only)  
+✅ **No API keys exposed in terminal commands**  
+✅ **Session-based authentication** via JWT tokens  
+
+## What Changed from Old System?
+
+| Feature | Before | Now |
+|---------|--------|-----|
+| Setup | Copy API key manually | `--setup` interactive auth |
+| Terminal command | `--device-id` + `--api-key` | Just `--port COM3` |
+| Device switching | Restart bridge | Click in dashboard |
+| Credentials | Typed in every time | Stored once, reused |
+| Device selection | Specify per run | Select in UI |
+| Complexity | High (5+ params) | Low (1 param: port) |
+
+## Example: Complete Flow
+
+```bash
+# Terminal 1: Setup (first time only)
+$ cd d:\cropthingy\aurdino-setup
+$ python serial_bridge.py --setup
+Email: john@farm.com
+Password: ••••••••
+[SUCCESS] Authenticated as: john@farm.com
+
+# Terminal 2: Run bridge (disconnect Arduino first if you want to avoid errors)
+$ python serial_bridge.py --port COM3
+[INFO] Fetching active device from dashboard...
+[INFO] Using device: 69dff7e9791bd359f682ce3a_RICE
+[SUCCESS] Connected to COM3 at 9600 baud
+[INFO] Listening on COM3...
+```
+
+```
+Browser Window: Dashboard at http://localhost:3000
+├─ Log in as: john@farm.com
+├─ Click "Rice" device → 🟢 GREEN
+└─ Watch sensor data appear in real-time!
+
+Switch devices (no restart needed):
+├─ Click "Wheat" → 🟢 GREEN
+├─ Same bridge terminal shows data flowing to Wheat
+└─ Click "Maize" → 🟢 GREEN
+```
+
+The bridge keeps running in the background, automatically sending data to whatever device is currently active in the dashboard!
+
+## Next Steps
+
+1. ✅ Register/login on dashboard: http://localhost:3000
+2. ✅ Run setup: `python serial_bridge.py --setup`
+3. ✅ Select active device: Click device in dashboard (🟢 GREEN)
+4. ✅ Start bridge: `python serial_bridge.py --port COM3`
+5. ✅ Watch data flow: Check dashboard real-time updates
+
+That's it! No complications, no API keys, no manual device ID tracking. 🎉
+
+---
+
+**Still having issues?** Check [QUICK_START.md](QUICK_START.md) or [SETUP_GUIDE.md](SETUP_GUIDE.md) for more details.

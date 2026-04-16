@@ -1,4 +1,4 @@
-from flask import request
+from flask import request, g
 
 from app.schemas.sensor_schema import validate_sensor_payload
 from app.services.sensor_service import (
@@ -18,10 +18,12 @@ def _serialize_reading(doc: dict):
     return {
         "id": str(doc.get("_id")),
         "device_id": doc.get("device_id"),
+        "owner_id": doc.get("owner_id"),
         "timestamp": doc.get("timestamp"),
         "temperature": doc.get("temperature"),
         "humidity": doc.get("humidity"),
         "soil_moisture": doc.get("soil_moisture"),
+        "raw_soil_score": doc.get("raw_soil_score"),
         "crop_type": doc.get("crop_type"),
         "location": doc.get("location"),
         "health_score": doc.get("health_score"),
@@ -49,21 +51,30 @@ def bulk_upload():
 
 
 def latest(device_id: str):
-    doc = get_latest_reading(device_id)
-    if not doc:
-        return error_response("No readings found", 404)
-    return success_response(_serialize_reading(doc), "Latest reading fetched")
+    try:
+        doc = get_latest_reading(device_id, g.user["user_id"])
+        if not doc:
+            return error_response("No readings found", 404)
+        return success_response(_serialize_reading(doc), "Latest reading fetched")
+    except ValueError as exc:
+        return error_response(str(exc), 404)
 
 
 def history(device_id: str):
-    limit = int(request.args.get("limit", 100))
-    limit = min(limit, MAX_HISTORY_LIMIT)
-    rows = [_serialize_reading(d) for d in get_history(device_id, limit)]
-    return success_response(rows, "History fetched")
+    try:
+        limit = int(request.args.get("limit", 100))
+        limit = min(limit, MAX_HISTORY_LIMIT)
+        rows = [_serialize_reading(d) for d in get_history(device_id, g.user["user_id"], limit)]
+        return success_response(rows, "History fetched")
+    except ValueError as exc:
+        return error_response(str(exc), 404)
 
 
 def alerts(device_id: str):
-    limit = int(request.args.get("limit", 100))
-    limit = min(limit, MAX_HISTORY_LIMIT)
-    rows = [_serialize_reading(d) for d in get_alerts(device_id, limit)]
-    return success_response(rows, "Alerts fetched")
+    try:
+        limit = int(request.args.get("limit", 100))
+        limit = min(limit, MAX_HISTORY_LIMIT)
+        rows = [_serialize_reading(d) for d in get_alerts(device_id, g.user["user_id"], limit)]
+        return success_response(rows, "Alerts fetched")
+    except ValueError as exc:
+        return error_response(str(exc), 404)

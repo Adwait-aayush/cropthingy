@@ -63,11 +63,11 @@ Here is the full path of one reading:
 1. The Arduino reads DHT11 humidity and temperature plus soil moisture.
 2. The Arduino prints a sensor line over USB serial.
 3. The Python bridge reads the serial line from your computer.
-4. The bridge sends a JSON POST to `/api/sensors/ingest`.
-5. The backend validates the payload and checks the device API key.
-6. The backend saves the reading in MongoDB.
+4. The bridge sends a JSON POST to `/api/sensors/ingest` (no auth needed!).
+5. The backend checks: which device is **active** in this user's dashboard session?
+6. The backend tags the reading with the active device and saves to MongoDB.
 7. The backend calculates health score and alerts.
-8. You query the API for latest readings, history, alerts, or predictions.
+8. You see live data on the dashboard for the selected device.
 
 ## What You Need Installed
 

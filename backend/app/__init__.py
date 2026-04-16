@@ -13,6 +13,7 @@ from app.routes.prediction_routes import prediction_bp
 from app.routes.upload_routes import upload_bp
 from app.routes.health_routes import health_bp
 from app.routes.analytics_routes import analytics_bp
+from app.routes.session_routes import session_bp
 
 
 def create_app() -> Flask:
@@ -41,6 +42,7 @@ def create_app() -> Flask:
     app.register_blueprint(upload_bp, url_prefix="/api/uploads")
     app.register_blueprint(health_bp, url_prefix="/api/health")
     app.register_blueprint(analytics_bp, url_prefix="/api/analytics")
+    app.register_blueprint(session_bp, url_prefix="/api/sessions")
 
     register_error_handlers(app)
 

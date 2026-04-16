@@ -52,33 +52,65 @@ Expected output:
 ----------------------
 ```
 
-## Step 4: Register a user and device
+## Step 4: Register user in frontend (NO TERMINAL NEEDED!)
 
-Run this in PowerShell to get a JWT token and device API key:
+1. Open browser: http://localhost:3000
+2. Click "Register"
+3. Fill form:
+   - Name: "Farmer John"
+   - Email: "john@farm.com"  
+   - Password: "secure123"
+4. Click Register → Dashboard loads!
+   - ✅ You now have 5 devices (rice, wheat, maize, vegetables, pulses)
+   - ✅ NO API keys to copy!
+   - ✅ Dashboard ready!
 
-```powershell
-$token = (Invoke-RestMethod -Uri "http://localhost:5000/api/auth/register" `
-  -Method Post `
-  -ContentType "application/json" `
-  -Body '{"name":"Farmer John","email":"farmer@example.com","password":"secure123"}').data.token
-
-$device = Invoke-RestMethod -Uri "http://localhost:5000/api/devices/register" `
-  -Method Post `
-  -Headers @{"Authorization"="Bearer $token"} `
-  -ContentType "application/json" `
-  -Body '{"device_id":"device_001","name":"Main Field Sensor","crop_type":"wheat","location":"North Field"}'
-
-$device.data.api_key
-```
-
-Copy the returned API key.
-
-## Step 5: Run the serial bridge
-
-Find your Arduino COM port in Device Manager, then run:
+## Step 5: Authenticate Serial Bridge (First Time Only)
 
 ```bash
-python serial_bridge.py --port COM3 --baudrate 9600 --backend http://localhost:5000 --device-id device_001 --api-key YOUR_DEVICE_API_KEY
+cd aurdino-setup
+python serial_bridge.py --setup
+```
+
+You'll be prompted to enter:
+- Email (your dashboard login email)
+- Password
+
+This stores your credentials securely on your PC. You only need to do this ONCE!
+
+## Step 6: Select Active Device in Dashboard
+
+1. Open http://localhost:3000
+2. Log in with your credentials
+3. In dashboard, find your device (Rice, Wheat, etc.)
+4. Click to select it (it turns GREEN - this marks it as active)
+
+## Step 7: Run Serial Bridge
+
+Now it's simple - just specify port and baudrate:
+
+```bash
+# Auto-detects port and uses active device from dashboard
+python serial_bridge.py --port COM3
+```
+
+Or even simpler - let it auto-detect the port:
+
+```bash
+# Fully automatic!
+python serial_bridge.py
+```
+
+The bridge will:
+- ✅ Auto-fetch active device from your dashboard
+- ✅ Connect to Arduino on specified port
+- ✅ Stream sensor data to the backend
+- ✅ Update dashboard in real-time
+3. Health score and predictions display ✅
+4. Switch device anytime → Same serial bridge, new data! ✨
+
+Done! No config files, no API keys, no complexity! 🚀
+python serial_bridge.py --port COM4 --baudrate 9600 --backend http://localhost:5000 --device-id device_001 --api-key YOUR_DEVICE_API_KEY
 ```
 
 Replace `COM3` with your actual port.

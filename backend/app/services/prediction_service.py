@@ -33,7 +33,21 @@ def _load_trained_model():
     return None, None
 
 
-def model_predict_irrigation(temperature: float, humidity: float, soil_moisture: float, crop_type: str) -> tuple[int, str]:
+def _resolve_device_crop_type(device: dict | None, device_id: str) -> str:
+    if device:
+        crop_type = device.get("crop_type") or device.get("device_type")
+        if crop_type:
+            return str(crop_type).lower()
+
+    if "_" in device_id:
+        suffix = device_id.rsplit("_", 1)[-1].strip().lower()
+        if suffix:
+            return suffix
+
+    return "wheat"
+
+
+def model_predict_irrigation(temperature: float, humidity: float, raw_soil_score: float, crop_type: str) -> tuple[int, str]:
     """Predict irrigation need using trained Keras model."""
     model, scaler = _load_trained_model()
     if model is None or scaler is None:
@@ -44,8 +58,8 @@ def model_predict_irrigation(temperature: float, humidity: float, soil_moisture:
         crop_map = {"rice": 0, "wheat": 1, "maize": 2, "vegetables": 3, "pulses": 4}
         crop_numeric = crop_map.get(crop_type.lower(), 1)  # Default to wheat
         
-        # Convert soil sensor reading (0-1023) to normalized value
-        soil_normalized = 1 - (soil_moisture / 1023.0)
+        # Convert soil sensor reading (0-1023 raw analog) to normalized value
+        soil_normalized = 1 - (raw_soil_score / 1023.0)
         
         # Prepare input
         input_data = np.array([[temperature, humidity, soil_normalized, crop_numeric]])
@@ -103,25 +117,26 @@ def compute_prediction_for_device(device_id: str):
     # Robust field extraction to support manually inserted mock data
     temp = float(latest.get("temperature", latest.get("temp", 28.0)))
     hum = float(latest.get("humidity", latest.get("hum", 60.0)))
-    soil = float(latest.get("soil_moisture", latest.get("soil", 45.0)))
+    soil_moisture = float(latest.get("soil_moisture", latest.get("soil", 45.0)))
+    raw_soil_score = float(latest.get("raw_soil_score", latest.get("raw_soil", 512.0)))
 
     # Fetch device details to get the crop type
     device = db[DEVICES].find_one({"device_id": device_id})
-    crop_type = device.get("crop_type", "wheat") if device else "wheat"
+    crop_type = _resolve_device_crop_type(device, device_id)
 
-    # Get rule-based health score
+    # Get rule-based health score (uses soil_moisture%)
     pred_score, model_used = model_predict(
         temperature=temp,
         humidity=hum,
-        soil_moisture=soil,
+        soil_moisture=soil_moisture,
         crop_type=crop_type
     )
 
-    # Get trained model irrigation prediction
+    # Get trained model irrigation prediction (uses raw_soil_score 0-1023)
     irrigation_needed, irrigation_model = model_predict_irrigation(
         temperature=temp,
         humidity=hum,
-        soil_moisture=soil,
+        raw_soil_score=raw_soil_score,
         crop_type=crop_type
     )
 

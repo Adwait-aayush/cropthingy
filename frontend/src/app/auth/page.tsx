@@ -77,18 +77,16 @@ export default function AuthPage() {
       if (response.ok) {
         setMessage({ 
           type: "success", 
-          text: isLogin ? "Login successful! Welcome back." : "Registration successful! You can now login." 
+          text: isLogin ? "Login successful! Welcome back." : "Registration successful! Redirecting to dashboard..." 
         });
         
         if (isLogin) {
           setToken(data.data.token);
           setTimeout(() => router.push("/dashboard"), 2000);
         } else {
-
-          setTimeout(() => {
-            setIsLogin(true);
-            setMessage(null);
-          }, 2500);
+          // Registration successful - go directly to dashboard
+          setToken(data.data.token);
+          setTimeout(() => router.push("/dashboard"), 2000);
         }
       } else {
         setMessage({ type: "error", text: data.message || "Authentication failed" });
@@ -196,7 +194,7 @@ export default function AuthPage() {
                       required
                       value={formData.name}
                       onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-400/20 focus:border-green-400 transition-all shadow-sm"
+                      className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-400/20 focus:border-green-400 transition-all shadow-sm text-gray-900 placeholder-gray-400"
                     />
                   </motion.div>
                 )}
@@ -211,7 +209,7 @@ export default function AuthPage() {
                   required
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-400/20 focus:border-green-400 transition-all shadow-sm"
+                  className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-400/20 focus:border-green-400 transition-all shadow-sm text-gray-900 placeholder-gray-400"
                 />
               </motion.div>
 
@@ -224,7 +222,7 @@ export default function AuthPage() {
                   required
                   value={formData.password}
                   onChange={handleChange}
-                  className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-400/20 focus:border-green-400 transition-all shadow-sm"
+                  className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-400/20 focus:border-green-400 transition-all shadow-sm text-gray-900 placeholder-gray-400"
                 />
               </motion.div>
 
@@ -238,7 +236,7 @@ export default function AuthPage() {
                     required
                     value={formData.confirmPassword}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-400/20 focus:border-green-400 transition-all shadow-sm"
+                    className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-400/20 focus:border-green-400 transition-all shadow-sm text-gray-900 placeholder-gray-400"
                   />
                 </motion.div>
               )}

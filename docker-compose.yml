@@ -7,3 +7,35 @@ services:
     ports:
       - "5000:5000"
     restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5000
+    depends_on:
+      - flask-backend
+    restart: unless-stopped
+
+  # Serial Bridge Service
+  # NOTE: Docker containers cannot directly access Windows COM ports (COM4, etc.)
+  # on Windows Docker Desktop. Keep this service disabled and run serial_bridge
+  # manually in a local terminal instead for reliable serial port access.
+  #
+  # To run locally (recommended for Windows):
+  # d:/cropthingy/.venv/Scripts/python.exe aurdino-setup/serial_bridge.py --port COM4 --backend http://localhost:5000 --device-id user_id_RICE
+  #
+  # Uncomment below only if running on Linux with USB device mapping:
+  # serial-bridge:
+  #   build: ./aurdino-setup
+  #   environment:
+  #     - BACKEND_URL=http://flask-backend:5000
+  #     - DEVICE_ID=SERIAL_SCHEMA_001
+  #     - API_KEY=replace_me_device_api_key
+  #   depends_on:
+  #     - flask-backend
+  #   restart: unless-stopped
+  #   command: python serial_bridge.py --port /dev/ttyUSB0 --backend http://flask-backend:5000 --device-id SERIAL_SCHEMA_001 --api-key replace_me_device_api_key
+  #   devices:
+  #     - /dev/ttyUSB0:/dev/ttyUSB0

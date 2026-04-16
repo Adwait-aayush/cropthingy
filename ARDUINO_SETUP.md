@@ -73,11 +73,38 @@ cd aurdino-setup
 pip install -r requirements.txt
 ```
 
-## 6. Register a User and Device
+## 6. Run the Serial Bridge
 
-The device must exist in the backend before the bridge can post readings.
+That's it! Just 3 parameters - no config files, no API keys!
 
-Example PowerShell flow:
+```bash
+# Find your Arduino COM port
+# Then run (adjust --port as needed):
+
+python serial_bridge.py \
+  --port COM3 \
+  --backend http://localhost:5000 \
+  --device-id user_456_RICE
+```
+
+**Expected output:**
+```
+✓ Connected to COM3 at 9600 baud
+[SERIAL] 🌡 Temp: 28.0°C | 💧 Humidity: 65.0%
+[DATA] {temp: 28.0, humidity: 65.0, soil: 45.0, raw: 2800}
+[BACKEND] ✓ Ingested to user_456_RICE
+[BACKEND] ✓ Ingested to user_456_RICE
+```
+
+## 7. Dashboard
+
+Dashboard automatically shows data for the active device selected by the user. To switch devices:
+1. User clicks different device in dashboard
+2. Device turns GREEN (active)
+3. Same serial bridge instance continues running
+4. New data tagged to new device automatically!
+
+**No restart needed!** ✨
 
 ```powershell
 $token = (Invoke-RestMethod -Uri "http://localhost:5000/api/auth/register" `

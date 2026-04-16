@@ -1,6 +1,9 @@
 from app.db.mongo import get_db
 from app.db.collections import USERS
 from app.utils.helpers import hash_password, verify_password, generate_jwt, utc_now_iso
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def register_user(payload: dict):
@@ -19,12 +22,14 @@ def register_user(payload: dict):
         "created_at": utc_now_iso(),
     }
     result = users.insert_one(user_doc)
+    user_id = str(result.inserted_id)
+    logger.info(f"✅ User registered: {user_id} ({user_doc['email']})")
 
-    token = generate_jwt({"user_id": str(result.inserted_id), "email": user_doc["email"], "role": user_doc["role"]})
+    token = generate_jwt({"user_id": user_id, "email": user_doc["email"], "role": user_doc["role"]})
     return {
         "token": token,
         "user": {
-            "id": str(result.inserted_id),
+            "id": user_id,
             "name": user_doc["name"],
             "email": user_doc["email"],
             "role": user_doc["role"],
