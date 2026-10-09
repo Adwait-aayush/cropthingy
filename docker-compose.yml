@@ -1,70 +1,41 @@
 version: "3.9"
 
 services:
-  mosquitto:
-    image: eclipse-mosquitto:2.0
+  flask-backend:
+    build: ./backend
+    env_file: ./backend/.env
     ports:
-      - "1883:1883"
-    volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
-      - mosquitto_data:/mosquitto/data
+      - "5000:5000"
     restart: unless-stopped
 
-  redis:
-    image: redis:7-alpine
+  frontend:
+    build: ./frontend
     ports:
-      - "6379:6379"
-    restart: unless-stopped
-
-  ingestion:
-    build: ./services/ingestion
-    env_file: .env
-    ports:
-      - "8000:8000"
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5000
     depends_on:
-      - mosquitto
-      - redis
+      - flask-backend
     restart: unless-stopped
 
-  preprocessing:
-    build: ./services/preprocessing
-    env_file: .env
-    depends_on:
-      - redis
-    restart: unless-stopped
-
-  training:
-    build: ./services/training
-    env_file: .env
-    profiles:
-      - manual
-    restart: "no"
-
-  inference:
-    build: ./services/inference
-    env_file: .env
-    ports:
-      - "8001:8001"
-    depends_on:
-      - redis
-    restart: unless-stopped
-
-  dashboard:
-    build: ./services/dashboard
-    env_file: .env
-    ports:
-      - "8050:8050"
-    depends_on:
-      - inference
-      - redis
-    restart: unless-stopped
-
-  fake-sensor:
-    build: ./services/fake_sensor
-    env_file: .env
-    depends_on:
-      - mosquitto
-    restart: unless-stopped
-
-volumes:
-  mosquitto_data:
+  # Serial Bridge Service
+  # NOTE: Docker containers cannot directly access Windows COM ports (COM4, etc.)
+  # on Windows Docker Desktop. Keep this service disabled and run serial_bridge
+  # manually in a local terminal instead for reliable serial port access.
+  #
+  # To run locally (recommended for Windows):
+  # d:/cropthingy/.venv/Scripts/python.exe aurdino-setup/serial_bridge.py --port COM4 --backend http://localhost:5000 --device-id user_id_RICE
+  #
+  # Uncomment below only if running on Linux with USB device mapping:
+  # serial-bridge:
+  #   build: ./aurdino-setup
+  #   environment:
+  #     - BACKEND_URL=http://flask-backend:5000
+  #     - DEVICE_ID=SERIAL_SCHEMA_001
+  #     - API_KEY=replace_me_device_api_key
+  #   depends_on:
+  #     - flask-backend
+  #   restart: unless-stopped
+  #   command: python serial_bridge.py --port /dev/ttyUSB0 --backend http://flask-backend:5000 --device-id SERIAL_SCHEMA_001 --api-key replace_me_device_api_key
+  #   devices:
+  #     - /dev/ttyUSB0:/dev/ttyUSB0
